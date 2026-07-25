@@ -81,6 +81,18 @@ SELECT
             '(sweet/sour/spicy/rich) and texture (crispy/juicy/creamy/chewy) of this dish. ',
             'Every claim must be supported by the text below. If the text does not ',
             'indicate a flavor or texture, stay general rather than inventing one. ',
+            -- Texture must follow the COOKING METHOD, not the raw ingredient. Without
+            -- this the model reads "vegetables" and writes "crunchy" even for a
+            -- simmered stew, and reads "rice powder" and writes "crumbly" for songpyeon,
+            -- which is chewy. It infers texture from what an ingredient is like before
+            -- it is cooked.
+            'Texture must reflect how the dish is COOKED, not how the raw ingredients ',
+            'would feel. Vegetables simmered in a stew are soft, not crunchy; a steamed ',
+            'dough is chewy, not crumbly. ',
+            -- Guards against the model's stock phrases. "juicy crunch" appeared in three
+            -- unrelated dishes in one sample of ten — that is a verbal tic, not an
+            -- observation about any of them.
+            'Avoid stock phrases. Describe THIS dish specifically. ',
             'Do NOT mention serving temperature or occasion. ',
             'Do NOT list ingredients or steps.\n\n',
             'Dish: ', title, '\n',
@@ -145,6 +157,40 @@ FROM ENRICHED.RECIPE_PROFILES
 WHERE source = 'worldcuisines'      -- the thin-input source, most at risk
 ORDER BY LENGTH(detail) ASC          -- least source detail first = most invention
 LIMIT 10;
+
+-- ------------------------------------------------------------
+-- 🤖 BOILERPLATE DETECTOR — the quality check that does NOT need domain knowledge
+-- ------------------------------------------------------------
+-- Spotting that "earthy" is wrong for jjinppang takes someone who has eaten one, and
+-- that does not scale past the cuisines you happen to know. But a stock phrase repeating
+-- across unrelated dishes is detectable without knowing anything about food — and it is
+-- a reliable smell, because a phrase the model reaches for regardless of the dish is by
+-- definition not describing any of them.
+--
+-- "juicy crunch" turned up in sundubu-jjigae, chow mein and hot-and-sour noodles in a
+-- single sample of ten. Two of those are simmered dishes with nothing crunchy in them.
+WITH phrases AS (
+    SELECT
+        dish_id,
+        LOWER(TRIM(value::STRING)) AS phrase
+    FROM ENRICHED.RECIPE_PROFILES,
+         LATERAL FLATTEN(INPUT => SPLIT(
+             -- crude trigram-ish split: break the profile on commas and periods
+             REGEXP_REPLACE(LOWER(sensory_profile), '[.,;]', '|'), '|'))
+    WHERE LENGTH(TRIM(value::STRING)) BETWEEN 8 AND 40
+)
+SELECT
+    phrase,
+    COUNT(DISTINCT dish_id) AS dishes_using_it
+FROM phrases
+GROUP BY phrase
+HAVING COUNT(DISTINCT dish_id) > 1
+ORDER BY dishes_using_it DESC
+LIMIT 20;
+-- Anything appearing across many unrelated dishes is a tic. Add it to the "avoid stock
+-- phrases" instruction in the prompt above, or make the instruction stronger, and rerun.
+-- Run this again after every prompt change — it is cheap and needs no expertise.
+
 
 -- TODO (learning): if the profiles read flat or generic, edit the prompt above and rerun.
 --   A single prompt line can noticeably change retrieval quality — this is exactly why
