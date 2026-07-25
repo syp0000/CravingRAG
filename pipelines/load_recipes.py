@@ -32,9 +32,22 @@ import pandas as pd
 # Pinning the cwd to the repo root makes the script work from anywhere.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-CSV_URL = (
+RECIPES_CSV_URL = (
     "https://huggingface.co/datasets/Hieu-Pham/kaggle_food_recipes/resolve/main/"
     "Food%20Ingredients%20and%20Recipe%20Dataset%20with%20Image%20Name%20Mapping.csv"
+)
+
+# Second source. The Epicurious corpus above is almost entirely American/European, which
+# quietly breaks the cross-lingual queries in eval/queries.yml: a Korean query for
+# "warm broth that cures a hangover" scores badly not because retrieval is bad, but
+# because the corpus contains no such dish. That is a corpus gap, not a retrieval defect,
+# and the two are easy to confuse when reading the numbers.
+#
+# worldcuisines is Wikipedia-derived and covers ~650 Asian dishes (Korea 69, Japan 182,
+# China 177, India 127). It has descriptions rather than ingredients/steps, which is fine:
+# Phase 2 rewrites everything into a flavor profile anyway.
+WORLD_CSV_URL = (
+    "https://huggingface.co/datasets/worldcuisines/food-kb/resolve/main/worldcuisines.csv"
 )
 
 
@@ -45,7 +58,7 @@ CSV_URL = (
 )
 def recipes(limit: int | None = None):
     """Read the recipe CSV and yield rows one at a time into dlt."""
-    df = pd.read_csv(CSV_URL)
+    df = pd.read_csv(RECIPES_CSV_URL)
 
     # A few rows have no title or no instructions. They would produce meaningless
     # flavor profiles in Phase 2, so drop them at ingestion rather than downstream.
@@ -66,6 +79,35 @@ def recipes(limit: int | None = None):
         }
 
 
+@dlt.resource(
+    name="world_dishes",
+    write_disposition="merge",
+    primary_key="dish_id",
+)
+def world_dishes(limit: int | None = None):
+    """Read the world-cuisine knowledge base — the international half of the corpus."""
+    df = pd.read_csv(WORLD_CSV_URL)
+    df = df.dropna(subset=["Name", "Text Description"])
+
+    # Descriptions run from 3 to ~1,090 characters. Anything very short ("A soup.")
+    # produces a useless flavor profile, so drop it here rather than paying for an
+    # LLM call on it in Phase 2.
+    df = df[df["Text Description"].str.len() >= 40]
+
+    if limit is not None:
+        df = df.head(limit)
+
+    for idx, row in df.iterrows():
+        yield {
+            "dish_id": f"wc-{idx}",
+            "title": row["Name"],
+            "description": row["Text Description"],
+            "cuisines": row["Cuisines"],
+            "countries": row["Countries"],
+            "area": row["Area"],
+        }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None,
@@ -80,7 +122,10 @@ def main() -> None:
         dataset_name="raw",          # lands in CRAVING_RAG.raw.recipes
     )
 
-    info = pipeline.run(recipes(limit=args.limit))
+    # Both resources load in one run. dlt creates a separate table per resource and
+    # keeps their schemas independent, so the two sources never have to be reshaped
+    # to match each other at ingestion time — that happens in 02_enrich.sql instead.
+    info = pipeline.run([recipes(limit=args.limit), world_dishes(limit=args.limit)])
     print(info)
 
     # TODO (learning): open the resulting table in Snowsight and look at the
