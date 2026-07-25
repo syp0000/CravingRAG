@@ -17,9 +17,17 @@ What dlt handles so you don't have to write it:
 """
 
 import argparse
+import os
+from pathlib import Path
 
 import dlt
 from datasets import load_dataset
+
+# dlt resolves .dlt/secrets.toml relative to the CURRENT WORKING DIRECTORY, not to this
+# file. Running `python pipelines/load_recipes.py` from inside pipelines/ therefore makes
+# dlt look in pipelines/.dlt/ and fail with a confusing "missing credentials" error.
+# Pinning the cwd to the repo root makes the script work from anywhere.
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @dlt.resource(
@@ -53,6 +61,8 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None,
                         help="max rows per split (for testing)")
     args = parser.parse_args()
+
+    os.chdir(REPO_ROOT)   # so .dlt/secrets.toml is always found — see note at top
 
     pipeline = dlt.pipeline(
         pipeline_name="craving_rag",
