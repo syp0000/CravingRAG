@@ -159,6 +159,34 @@ ORDER BY LENGTH(detail) ASC          -- least source detail first = most inventi
 LIMIT 10;
 
 -- ------------------------------------------------------------
+-- 💰 WHAT DID THAT ACTUALLY COST?
+-- ------------------------------------------------------------
+-- Run this after every enrichment. Two reasons:
+--   1. It tells you what a full-corpus run would cost before you commit to one —
+--      multiply by (15,570 / rows_you_just_did).
+--   2. Cost per row is a Phase 5 metric. Almost no portfolio project reports what its
+--      LLM pipeline cost to run, and it is the first thing a data team asks.
+SELECT
+    model_name,
+    function_name,
+    SUM(tokens)         AS tokens,
+    SUM(token_credits)  AS credits
+FROM SNOWFLAKE.ACCOUNT_USAGE.CORTEX_FUNCTIONS_USAGE_HISTORY
+WHERE start_time >= DATEADD('hour', -2, CURRENT_TIMESTAMP())
+GROUP BY model_name, function_name
+ORDER BY credits DESC;
+
+-- Note: ACCOUNT_USAGE views lag by up to ~2 hours, so this may be empty right after a
+-- run. CORTEX_FUNCTIONS_QUERY_USAGE_HISTORY gives per-query detail if you need it sooner.
+--
+-- TODO (Phase 5 experiment): mistral-large2 is one of the pricier models. Re-run the
+-- enrichment with a cheaper one (llama3.1-8b, mistral-7b) on the same 200 dishes and
+-- compare both the profile quality AND the credits. "Model X cost 6x less and scored
+-- within 3% on Recall@5" is a genuinely strong result — that is the tradeoff real teams
+-- argue about.
+
+
+-- ------------------------------------------------------------
 -- 🤖 BOILERPLATE DETECTOR — the quality check that does NOT need domain knowledge
 -- ------------------------------------------------------------
 -- Spotting that "earthy" is wrong for jjinppang takes someone who has eaten one, and
