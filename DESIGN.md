@@ -190,8 +190,15 @@ that is *still* a finding worth reporting honestly.
 | Arm | What is embedded | Retrieval | Question it answers |
 |---|---|---|---|
 | **A** (baseline) | raw ingredient list | pure vector | Does enrichment matter at all? |
-| **B** (our approach) | LLM flavor profile | pure vector | How much does enrichment help? |
-| **C** (upgrade) | LLM flavor profile | Cortex Search hybrid | Does keyword+vector beat vector alone? |
+| **B** (our approach) | sensory + context profile | pure vector | How much does enrichment help? |
+| **C** (upgrade) | sensory + context profile | Cortex Search hybrid | Does keyword+vector beat vector alone? |
+| **D** (ablation) | sensory profile **only** | pure vector | Is the inferred context worth its hallucination risk? |
+
+Arm D exists because enrichment produces two different kinds of text. `sensory_profile` is
+grounded in the source; `context_profile` (temperature, season, occasion) is largely the model's
+own knowledge, and is where the observed hallucinations clustered. D vs B measures exactly what
+that inferred context buys: it should help occasion queries ("cozy for a rainy day") and do
+nothing for sensory ones. If D ≈ B overall, the risky half is not earning its place.
 
 **Building the eval set** (`eval/queries.yml`)
 

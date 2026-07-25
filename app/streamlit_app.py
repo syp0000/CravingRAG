@@ -28,7 +28,6 @@ def retrieve(session: Session, query: str, k: int = TOP_K):
     sql = f"""
         SELECT
             title,
-            ingredients,
             flavor_profile,
             VECTOR_COSINE_SIMILARITY(
                 profile_vec,

@@ -61,29 +61,51 @@ SELECT
     cuisine,
     detail,
 
+    -- ⭐ TWO SEPARATE FIELDS, deliberately.
+    --
+    -- The earlier single-prompt version asked for taste, texture, temperature AND
+    -- occasion in one shot. But a source line like "a melon stuffed with meat and rice"
+    -- supports taste and texture only — it says nothing about serving temperature or
+    -- occasion. Demanding all four forced the model to invent the last two, and the
+    -- observed errors clustered there exactly as you would predict: stuffed melon came
+    -- back as "cool melon flesh" alongside "warm stuffing" (self-contradictory for a
+    -- cooked dish), and dovga as "delightfully cool" when it is traditionally served hot.
+    --
+    -- Dropping occasion entirely is not the answer either — "cozy for a rainy day" is
+    -- precisely the query this project exists to serve. So generate both, keep them in
+    -- separate columns, and let Phase 5 measure what each contributes.
     SNOWFLAKE.CORTEX.COMPLETE(
         'mistral-large2',
         CONCAT(
-            'You are a food writer. Describe this dish in 2 sentences, ',
-            'focusing ONLY on: taste (sweet/sour/spicy/rich), texture ',
-            '(crispy/juicy/creamy/chewy), temperature, and what occasion or ',
-            'mood it suits. Do NOT list ingredients or steps. ',
-            'Be vivid and sensory.\n\n',
-            -- Grounding clause. Without this, a thin source description makes the model
-            -- fill the gaps from its own memory of the dish, and it is confidently wrong
-            -- more often for non-Western dishes — exactly the ones the cross-lingual
-            -- queries target. A hallucinated profile silently corrupts the vector and
-            -- nobody ever sees it, unlike a hallucinated answer.
-            'IMPORTANT: base every flavor claim on the text provided below. ',
-            'If the text does not support a specific taste or texture, stay general ',
-            'rather than inventing a detail. Do not guess at flavors you cannot justify ',
-            'from the text.\n\n',
+            'You are a food writer. In 2 sentences, describe ONLY the taste ',
+            '(sweet/sour/spicy/rich) and texture (crispy/juicy/creamy/chewy) of this dish. ',
+            'Every claim must be supported by the text below. If the text does not ',
+            'indicate a flavor or texture, stay general rather than inventing one. ',
+            'Do NOT mention serving temperature or occasion. ',
+            'Do NOT list ingredients or steps.\n\n',
             'Dish: ', title, '\n',
             detail
         )
-    ) AS flavor_profile,
+    ) AS sensory_profile,
+
+    -- Explicitly model knowledge, not source-derived. Kept separate so it can never be
+    -- mistaken for something the source said.
+    SNOWFLAKE.CORTEX.COMPLETE(
+        'mistral-large2',
+        CONCAT(
+            'In ONE sentence, state when someone would eat this dish: serving temperature, ',
+            'season, occasion, or mood. If you are not confident, say only what you are ',
+            'sure of and keep it general. Do not invent specific cultural claims.\n\n',
+            'Dish: ', title, '\n',
+            detail
+        )
+    ) AS context_profile,
 
     CURRENT_TIMESTAMP() AS enriched_at
+    -- 03_embed.sql builds flavor_profile = sensory_profile || ' ' || context_profile
+    -- and embeds that. Keeping the parts separate here means Phase 5 can embed
+    -- sensory-only as a fourth arm and measure what the inferred context is worth —
+    -- retrieval gain on occasion queries, against hallucination risk.
 
 FROM all_dishes
 -- Sample both sources rather than taking the first N rows, which would be all
@@ -95,7 +117,7 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY source ORDER BY RANDOM()) <= 10;
 -- ------------------------------------------------------------
 -- Read the output. This is where you judge prompt quality.
 -- ------------------------------------------------------------
-SELECT source, cuisine, title, flavor_profile
+SELECT source, cuisine, title, sensory_profile, context_profile
 FROM ENRICHED.RECIPE_PROFILES
 ORDER BY source
 LIMIT 20;
@@ -117,7 +139,8 @@ SELECT source, COUNT(*) FROM ENRICHED.RECIPE_PROFILES GROUP BY source;
 SELECT
     title,
     LEFT(detail, 300)  AS source_text,
-    flavor_profile
+    sensory_profile,
+    context_profile
 FROM ENRICHED.RECIPE_PROFILES
 WHERE source = 'worldcuisines'      -- the thin-input source, most at risk
 ORDER BY LENGTH(detail) ASC          -- least source detail first = most invention

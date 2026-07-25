@@ -15,16 +15,20 @@ USE WAREHOUSE CRAVING_WH;
 
 CREATE OR REPLACE TABLE SEARCH.RECIPE_VECTORS AS
 SELECT
-    recipe_id,
+    dish_id,
     title,
-    ingredients,
-    flavor_profile,
+    source,
+    -- Recombine the two enrichment fields into the text we actually index.
+    -- Phase 5 can embed sensory_profile alone as an extra arm to measure what the
+    -- inferred context contributes.
+    sensory_profile || ' ' || context_profile AS flavor_profile,
 
     -- 👇 the embedding step: text → VECTOR(FLOAT, 1024)
-    AI_EMBED('snowflake-arctic-embed-l-v2.0', flavor_profile) AS profile_vec
+    AI_EMBED('snowflake-arctic-embed-l-v2.0',
+             sensory_profile || ' ' || context_profile) AS profile_vec
 
 FROM ENRICHED.RECIPE_PROFILES
-WHERE flavor_profile IS NOT NULL;
+WHERE sensory_profile IS NOT NULL AND context_profile IS NOT NULL;
 
 
 -- ------------------------------------------------------------
