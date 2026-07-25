@@ -89,10 +89,17 @@ def world_dishes(limit: int | None = None):
     df = pd.read_csv(WORLD_CSV_URL)
     df = df.dropna(subset=["Name", "Text Description"])
 
-    # Descriptions run from 3 to ~1,090 characters. Anything very short ("A soup.")
-    # produces a useless flavor profile, so drop it here rather than paying for an
-    # LLM call on it in Phase 2.
-    df = df[df["Text Description"].str.len() >= 40]
+    # Descriptions run from 3 to ~1,090 characters, and a short one cannot support a
+    # grounded flavor profile — the LLM has nothing to work from and invents instead.
+    # Karakudamono ("various pastry desserts originating from another country") came
+    # back confidently described as "rich sweetness, delightfully chewy, slight
+    # crispness", none of which is in the source or knowable from it.
+    #
+    # 80 characters drops 311 of 2,386 dishes (13%). Spot-checking the 80-120 range
+    # shows those still list real ingredients, so the cut lands in the right place.
+    # This is also cheaper: the rows removed are exactly the ones whose LLM call could
+    # only have produced noise.
+    df = df[df["Text Description"].str.len() >= 80]
 
     if limit is not None:
         df = df.head(limit)
