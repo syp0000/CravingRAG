@@ -74,8 +74,37 @@ FROM context;
 -- SET user_query = 'light palate cleanser after something greasy';
 -- SET user_query = '상큼하고 과즙이 터지는';   -- cross-lingual: Korean query, English corpus
 --
--- If a query returns poor results, that is a signal to improve the prompt in 02_enrich.sql,
--- not the search query itself.
+-- ------------------------------------------------------------
+-- 🔍 BEFORE BLAMING RETRIEVAL: does the corpus even contain an answer?
+-- ------------------------------------------------------------
+-- A bad result has two very different causes, and they look identical from the outside:
+--   (a) retrieval failed to find a dish that was there   → fix embeddings/prompt
+--   (b) no suitable dish was ever enriched               → fix the corpus
+--
+-- Always check (b) first. It is cheaper to check and more often the cause.
+--
+-- This happened on the first real run: '해장되는 뜨끈한 국물' returned vindaloo and a cold
+-- slaw. It looked like broken cross-lingual retrieval. It was not — only ~14% of world
+-- dishes had been enriched, so of 15 Korean soups in the corpus roughly 2 existed as
+-- vectors. There was nothing to find.
+
+-- How many dishes of the relevant kind actually made it into the index?
+SELECT source, COUNT(*) AS enriched_dishes
+FROM SEARCH.RECIPE_VECTORS
+GROUP BY source;
+
+-- Look for candidates by keyword, independent of the vector search. If this returns
+-- nothing, the query cannot possibly succeed and the prompt is not the problem.
+SELECT title, LEFT(flavor_profile, 120) AS profile
+FROM SEARCH.RECIPE_VECTORS
+WHERE flavor_profile ILIKE '%broth%'
+   OR flavor_profile ILIKE '%soup%'
+   OR flavor_profile ILIKE '%stew%'
+LIMIT 20;
+
+-- ------------------------------------------------------------
+-- If a query returns poor results AND the corpus does contain good candidates, THEN it
+-- is a signal to improve the prompt in 02_enrich.sql — not the search query itself.
 
 
 -- ------------------------------------------------------------

@@ -120,10 +120,25 @@ SELECT
     -- retrieval gain on occasion queries, against hallucination risk.
 
 FROM all_dishes
--- Sample both sources rather than taking the first N rows, which would be all
--- Epicurious and would not exercise the cross-lingual queries at all.
-QUALIFY ROW_NUMBER() OVER (PARTITION BY source ORDER BY RANDOM()) <= 10;
--- 👆 10 per source = 20 rows. TODO: raise once the output looks good.
+-- ⭐ ASYMMETRIC SAMPLING — enrich all of the cheap source, sample the expensive one.
+--
+-- These two sources cost wildly different amounts per row, because Epicurious carries
+-- ~1,015 characters of detail against worldcuisines' ~198:
+--     Epicurious    13,495 rows  →  13.1M tokens
+--     worldcuisines  2,075 rows  →   1.2M tokens   (1/11th the cost)
+--
+-- And all the corpus diversity lives in the cheap one. Sampling both evenly was what
+-- made the Korean query fail: at ~14% coverage only ~9 of 63 Korean dishes and ~2 of
+-- 15 Korean soups were ever enriched, so "warm broth for a hangover" had essentially
+-- nothing to retrieve. The retriever was fine; the corpus had no answer in it.
+--
+-- So: take worldcuisines whole, sample Epicurious. Full international coverage for
+-- about 15% of what a full run on everything would cost.
+QUALIFY ROW_NUMBER() OVER (PARTITION BY source ORDER BY RANDOM())
+        <= CASE source
+               WHEN 'worldcuisines' THEN 999999   -- all of it
+               ELSE 1000                          -- sample; raise once Phase 3 works
+           END;
 
 
 -- ------------------------------------------------------------
