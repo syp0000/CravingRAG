@@ -11,14 +11,24 @@
 USE DATABASE CRAVING_RAG;
 USE WAREHOUSE CRAVING_WH;
 
+-- ------------------------------------------------------------
+-- ⓪ First, confirm what dlt actually created.
+--    dlt lowercases identifiers, so the schema may be "raw" (quoted, lowercase)
+--    rather than RAW. Run this and use whatever name you see below.
+-- ------------------------------------------------------------
+SHOW TABLES IN DATABASE CRAVING_RAG;
+-- If the SELECT below fails with "does not exist", quote the lowercase names instead:
+--    FROM "raw"."recipes"
+
+
 -- ⚠️ IMPORTANT: keep the LIMIT small on the first run.
---   7,198 rows x one LLM call each burns real credits. Validate the prompt on 20 rows,
+--   13.5k rows x one LLM call each burns real credits. Validate the prompt on 20 rows,
 --   then scale up once the output looks good.
 
 CREATE OR REPLACE TABLE ENRICHED.RECIPE_PROFILES AS
 SELECT
-    uid,
-    name,
+    recipe_id,
+    title,
     ingredients,
 
     SNOWFLAKE.CORTEX.COMPLETE(
@@ -29,22 +39,23 @@ SELECT
             '(crispy/juicy/creamy/chewy), temperature, and what occasion or ',
             'mood it suits. Do NOT list ingredients or steps. ',
             'Be vivid and sensory.\n\n',
-            'Recipe: ', name, '\n',
-            'Ingredients: ', ingredients, '\n',
-            'Description: ', COALESCE(description, '')
+            'Recipe: ', title, '\n',
+            'Ingredients: ', LEFT(ingredients, 800), '\n',
+            -- instructions can run very long; truncate to keep token cost predictable
+            'Instructions: ', LEFT(instructions, 800)
         )
     ) AS flavor_profile,
 
     CURRENT_TIMESTAMP() AS enriched_at
 
-FROM RAW.RECIPES
-LIMIT 20;          -- 👈 TODO: raise once output looks good (20 → 200 → all)
+FROM RAW.RECIPES          -- 👈 if this errors, use "raw"."recipes" (see step ⓪)
+LIMIT 20;                 -- 👈 TODO: raise once output looks good (20 → 200 → all)
 
 
 -- ------------------------------------------------------------
 -- Read the output. This is where you judge prompt quality.
 -- ------------------------------------------------------------
-SELECT name, flavor_profile
+SELECT title, flavor_profile
 FROM ENRICHED.RECIPE_PROFILES
 LIMIT 10;
 
@@ -55,4 +66,4 @@ LIMIT 10;
 -- Experiments worth running:
 --   1. Drop "Be vivid and sensory" — how does the output change?
 --   2. Skip enrichment entirely and embed raw ingredients instead. How much worse is
---      retrieval? That measured gap is a real result you can put on your resume.
+--      retrieval? That measured gap is arm A of the Phase 5 benchmark.

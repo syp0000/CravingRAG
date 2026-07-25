@@ -2,12 +2,15 @@
 Phase 1 — load the recipe dataset into Snowflake with dlt.
 
 Usage:
-    python pipelines/load_recipes.py              # full load (7,198 rows)
+    python pipelines/load_recipes.py              # full load (~13.5k rows)
     python pipelines/load_recipes.py --limit 50   # small sample — start here
 
-Dataset: m3hrdadfi/recipe_nlg_lite (HuggingFace)
-    columns: uid, name, description, link, ner, ingredients, steps
-    train 6,118 + test 1,080 = 7,198 recipes
+Dataset: Hieu-Pham/kaggle_food_recipes (HuggingFace) — Epicurious recipes, plain CSV.
+    columns: Title, Ingredients, Instructions, Image_Name, Cleaned_Ingredients
+    13,501 rows (a handful have null Title/Instructions and are skipped)
+
+We read the CSV directly instead of using the `datasets` library, because `datasets` v3+
+dropped support for script-based datasets and pulling a plain file needs no extra dependency.
 
 What dlt handles so you don't have to write it:
     - schema inference and table creation
@@ -21,7 +24,7 @@ import os
 from pathlib import Path
 
 import dlt
-from datasets import load_dataset
+import pandas as pd
 
 # dlt resolves .dlt/secrets.toml relative to the CURRENT WORKING DIRECTORY, not to this
 # file. Running `python pipelines/load_recipes.py` from inside pipelines/ therefore makes
@@ -29,37 +32,44 @@ from datasets import load_dataset
 # Pinning the cwd to the repo root makes the script work from anywhere.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+CSV_URL = (
+    "https://huggingface.co/datasets/Hieu-Pham/kaggle_food_recipes/resolve/main/"
+    "Food%20Ingredients%20and%20Recipe%20Dataset%20with%20Image%20Name%20Mapping.csv"
+)
+
 
 @dlt.resource(
     name="recipes",
-    write_disposition="merge",   # same uid overwrites, so reruns never duplicate
-    primary_key="uid",
+    write_disposition="merge",   # same recipe_id overwrites, so reruns never duplicate
+    primary_key="recipe_id",
 )
 def recipes(limit: int | None = None):
-    """Read recipes from HuggingFace and yield them one at a time into dlt."""
-    for split in ("train", "test"):
-        ds = load_dataset("m3hrdadfi/recipe_nlg_lite", split=split)
+    """Read the recipe CSV and yield rows one at a time into dlt."""
+    df = pd.read_csv(CSV_URL)
 
-        for i, row in enumerate(ds):
-            if limit is not None and i >= limit:
-                break
+    # A few rows have no title or no instructions. They would produce meaningless
+    # flavor profiles in Phase 2, so drop them at ingestion rather than downstream.
+    df = df.dropna(subset=["Title", "Ingredients", "Instructions"])
 
-            yield {
-                "uid": row["uid"],
-                "name": row["name"],
-                "description": row["description"],
-                "ingredients": row["ingredients"],
-                "steps": row["steps"],
-                "ner": row["ner"],
-                "link": row["link"],
-                "split": split,
-            }
+    if limit is not None:
+        df = df.head(limit)
+
+    # Image_Name looks like a natural key but has ~29 duplicates, so use the row
+    # index instead — it is unique by construction and stable for a fixed file.
+    for idx, row in df.iterrows():
+        yield {
+            "recipe_id": int(idx),
+            "title": row["Title"],
+            "ingredients": row["Ingredients"],
+            "instructions": row["Instructions"],
+            "image_name": row["Image_Name"],
+        }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None,
-                        help="max rows per split (for testing)")
+                        help="max rows to load (for testing)")
     args = parser.parse_args()
 
     os.chdir(REPO_ROOT)   # so .dlt/secrets.toml is always found — see note at top
@@ -67,7 +77,7 @@ def main() -> None:
     pipeline = dlt.pipeline(
         pipeline_name="craving_rag",
         destination="snowflake",
-        dataset_name="RAW",          # lands in CRAVING_RAG.RAW.RECIPES
+        dataset_name="raw",          # lands in CRAVING_RAG.raw.recipes
     )
 
     info = pipeline.run(recipes(limit=args.limit))

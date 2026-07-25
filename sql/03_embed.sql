@@ -15,8 +15,8 @@ USE WAREHOUSE CRAVING_WH;
 
 CREATE OR REPLACE TABLE SEARCH.RECIPE_VECTORS AS
 SELECT
-    uid,
-    name,
+    recipe_id,
+    title,
     ingredients,
     flavor_profile,
 
@@ -30,7 +30,7 @@ WHERE flavor_profile IS NOT NULL;
 -- ------------------------------------------------------------
 -- Look at an actual vector once, to build intuition
 -- ------------------------------------------------------------
-SELECT name, profile_vec
+SELECT title, profile_vec
 FROM SEARCH.RECIPE_VECTORS
 LIMIT 1;
 -- → [0.021, -0.043, 0.11, ...] — 1024 numbers.

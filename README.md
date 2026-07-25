@@ -26,8 +26,8 @@ indexed. See [DESIGN.md](DESIGN.md) for the full rationale.
 ## Architecture
 
 ```
-HuggingFace recipe_nlg_lite (7,198 recipes)
-        │  dlt — schema inference, merge by uid
+HuggingFace kaggle_food_recipes (13,501 recipes)
+        │  dlt — schema inference, merge by recipe_id
         ▼
    RAW.RECIPES
         │  CORTEX.COMPLETE — generate sensory flavor profile
@@ -113,7 +113,7 @@ Run the phases in order. Each one is independently verifiable.
 | 6 | Launch the UI | `streamlit run app/streamlit_app.py` |
 
 > ⚠️ **Start small.** Use `--limit 50` and keep `LIMIT 20` in `02_enrich.sql` on the first pass.
-> Running the LLM over all 7,198 recipes before validating the prompt wastes credits.
+> Running the LLM over all 13,501 recipes before validating the prompt wastes credits.
 > Also set `AUTO_SUSPEND = 60` on the warehouse (step 1 does this) so idle time is not billed.
 
 ---

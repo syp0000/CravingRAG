@@ -27,7 +27,7 @@ def retrieve(session: Session, query: str, k: int = TOP_K):
     """① RETRIEVAL — the Top-K recipes semantically closest to the query."""
     sql = f"""
         SELECT
-            name,
+            title,
             ingredients,
             flavor_profile,
             VECTOR_COSINE_SIMILARITY(
@@ -43,7 +43,7 @@ def retrieve(session: Session, query: str, k: int = TOP_K):
 
 def explain(session: Session, query: str, rows) -> str:
     """② GENERATION — explain the matches, grounded only in retrieved recipes."""
-    context = "\n".join(f"- {r['NAME']}: {r['FLAVOR_PROFILE']}" for r in rows)
+    context = "\n".join(f"- {r['TITLE']}: {r['FLAVOR_PROFILE']}" for r in rows)
 
     prompt = (
         f'The user wants: "{query}"\n\n'
@@ -84,7 +84,7 @@ if query:
     # Always show what was retrieved — RAG systems should expose their evidence.
     with st.expander(f"🔍 {len(rows)} retrieved recipes (by similarity)"):
         for r in rows:
-            st.markdown(f"**{r['NAME']}**  ·  similarity `{r['SIMILARITY']:.3f}`")
+            st.markdown(f"**{r['TITLE']}**  ·  similarity `{r['SIMILARITY']:.3f}`")
             st.caption(r["FLAVOR_PROFILE"])
             st.divider()
 

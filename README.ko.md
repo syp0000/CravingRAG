@@ -26,7 +26,7 @@ LLM이 먼저 각 레시피를 **감각 묘사(flavor profile)** 로 다시 쓰�
 ## 아키텍처
 
 ```
-HuggingFace recipe_nlg_lite (레시피 7,198개)
+HuggingFace kaggle_food_recipes (레시피 13,501개)
         │  dlt — 스키마 추론, uid 기준 merge
         ▼
    RAW.RECIPES
@@ -113,7 +113,7 @@ cp .dlt/example.secrets.toml .dlt/secrets.toml
 | 6 | UI 실행 | `streamlit run app/streamlit_app.py` |
 
 > ⚠️ **작게 시작하세요.** 처음엔 `--limit 50`, `02_enrich.sql`의 `LIMIT 20` 을 유지하세요.
-> 프롬프트 품질도 확인 안 하고 7,198개 전체에 LLM을 돌리면 크레딧이 그냥 날아갑니다.
+> 프롬프트 품질도 확인 안 하고 13,501개 전체에 LLM을 돌리면 크레딧이 그냥 날아갑니다.
 > 웨어하우스 `AUTO_SUSPEND = 60` 도 꼭 설정하세요 (1단계에 포함됨) — 놀고 있는 시간에
 > 과금되지 않게 하는 가장 중요한 설정입니다.
 

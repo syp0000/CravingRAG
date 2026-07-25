@@ -60,9 +60,9 @@ Now embedding `"refreshing and bursting with juice"` lands **close** to that vec
 ## 3. End-to-end data flow
 
 ```
- [HuggingFace] recipe_nlg_lite (7,198 recipes)
+ [HuggingFace] kaggle_food_recipes (13,501 recipes)
         │
-        │  dlt  — incremental load, schema inference, merge by uid
+        │  dlt  — incremental load, schema inference, merge by recipe_id
         ▼
  RAW.RECIPES                      ← untouched source data
         │
@@ -128,12 +128,12 @@ which is a common and hard-to-debug mistake.
 
 ### Phase 1 — Pipeline (no RAG yet)
 - [ ] Create Snowflake trial account + database/schema/warehouse (`sql/01_setup.sql`)
-- [ ] Load 7,198 recipes with dlt (`pipelines/load_recipes.py`)
+- [ ] Load 13,501 recipes with dlt (`pipelines/load_recipes.py`)
 - [ ] Verify with `SELECT COUNT(*)` — **this much is pure data engineering**
 
 ### Phase 2 — Indexing (first half of RAG)
 - [ ] Generate flavor profiles with CORTEX.COMPLETE (`sql/02_enrich.sql`)
-  - ⚠️ Start with `LIMIT 20`. Running all 7,198 up front burns credits for nothing.
+  - ⚠️ Start with `LIMIT 20`. Running all 13,501 up front burns credits for nothing.
 - [ ] Generate embeddings with AI_EMBED (`sql/03_embed.sql`)
 
 ### Phase 3 — Retrieval (second half of RAG)
@@ -165,7 +165,7 @@ that is *still* a finding worth reporting honestly.
 Ground truth is the hard part of RAG evaluation — for each query you must know which recipes
 *should* have been returned.
 
-1. Freeze a **fixed subset** (e.g. 200 enriched recipes). Hand-labeling against all 7,198 is
+1. Freeze a **fixed subset** (e.g. 200 enriched recipes). Hand-labeling against all 13,501 is
    not realistic; a smaller, fully-labeled corpus gives more trustworthy numbers than a large
    partially-labeled one.
 2. Write ~20 queries spanning categories: sensory, occasion, dietary constraint, cross-lingual.

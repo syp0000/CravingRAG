@@ -14,7 +14,7 @@ USE WAREHOUSE CRAVING_WH;
 SET user_query = 'something refreshing and bursting with juice';
 
 SELECT
-    name,
+    title,
     flavor_profile,
     VECTOR_COSINE_SIMILARITY(
         profile_vec,
@@ -36,7 +36,7 @@ LIMIT 10;
 
 WITH top_recipes AS (
     SELECT
-        name,
+        title,
         flavor_profile,
         VECTOR_COSINE_SIMILARITY(
             profile_vec,
@@ -47,7 +47,7 @@ WITH top_recipes AS (
     LIMIT 5
 ),
 context AS (
-    SELECT LISTAGG(CONCAT('- ', name, ': ', flavor_profile), '\n') AS retrieved_context
+    SELECT LISTAGG(CONCAT('- ', title, ': ', flavor_profile), '\n') AS retrieved_context
     FROM top_recipes
 )
 SELECT
@@ -86,9 +86,9 @@ FROM context;
 --
 -- CREATE CORTEX SEARCH SERVICE recipe_search
 --   ON flavor_profile
---   ATTRIBUTES name, ingredients
+--   ATTRIBUTES title, ingredients
 --   WAREHOUSE = CRAVING_WH
 --   TARGET_LAG = '1 day'
---   AS SELECT uid, name, ingredients, flavor_profile FROM SEARCH.RECIPE_VECTORS;
+--   AS SELECT recipe_id, title, ingredients, flavor_profile FROM SEARCH.RECIPE_VECTORS;
 --
 -- Then benchmark it against query ① above. That comparison is the number for your resume.
