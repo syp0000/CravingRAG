@@ -145,14 +145,72 @@ which is a common and hard-to-debug mistake.
 - [ ] Generate grounded explanations with CORTEX.COMPLETE
 - [ ] Streamlit app (`app/streamlit_app.py`)
 
-### Phase 5 — Upgrade (the resume differentiator)
-- [ ] Swap in **Cortex Search** → hybrid retrieval (vector + BM25 keyword)
-- [ ] Build a 20-query eval set and measure **Recall@5** for both approaches
-- [ ] Report the delta, e.g. "hybrid improved Recall@5 by 12%"
+### Phase 5 — Evaluation (⭐ the resume differentiator — do not skip)
 
-> Phase 5's **measured comparison** is the strongest thing on this project.
-> "I built a RAG app" is common. "I evaluated two retrieval strategies and measured the
-> difference" is not.
+Most RAG portfolio projects stop at Phase 4. This phase is what separates
+*"I built a RAG app"* from *"I measured retrieval quality and can defend the design."*
+
+**Three arms to compare.** Arm A exists to test whether this project's central claim —
+that document enrichment matters — is actually true. If A ≈ B, the core idea is wrong and
+that is *still* a finding worth reporting honestly.
+
+| Arm | What is embedded | Retrieval | Question it answers |
+|---|---|---|---|
+| **A** (baseline) | raw ingredient list | pure vector | Does enrichment matter at all? |
+| **B** (our approach) | LLM flavor profile | pure vector | How much does enrichment help? |
+| **C** (upgrade) | LLM flavor profile | Cortex Search hybrid | Does keyword+vector beat vector alone? |
+
+**Building the eval set** (`eval/queries.yml`)
+
+Ground truth is the hard part of RAG evaluation — for each query you must know which recipes
+*should* have been returned.
+
+1. Freeze a **fixed subset** (e.g. 200 enriched recipes). Hand-labeling against all 7,198 is
+   not realistic; a smaller, fully-labeled corpus gives more trustworthy numbers than a large
+   partially-labeled one.
+2. Write ~20 queries spanning categories: sensory, occasion, dietary constraint, cross-lingual.
+3. Label relevant recipes per query. To speed this up, use an LLM to pre-screen candidates,
+   then verify by hand — and **state in the README that labels were LLM-assisted**, since that
+   introduces bias toward what an LLM considers similar.
+
+**Metric**
+
+```
+Recall@5 = (relevant recipes appearing in top 5) / min(5, total relevant for that query)
+```
+
+Report the mean across all queries, per arm. Also record **failure cases** — the 3-5 queries
+with the worst recall, and a one-line diagnosis of why. A candidate who can articulate where
+their own system breaks reads as far more senior than one who only shows the happy path.
+
+**Also worth recording:** credits consumed for indexing and per query. Cost per query is a
+conversation data teams have constantly, and almost no portfolio project reports it.
+
+### Phase 6 — Constrained retrieval (optional, high value)
+
+Add a `PANTRY` table of ingredients on hand, and answer *"something refreshing **that I can
+actually make tonight**."* This is more interesting than it sounds: it turns pure semantic
+search into **filtered vector search**, which has a genuine engineering tradeoff.
+
+| Strategy | How | Failure mode |
+|---|---|---|
+| **Post-filter** | retrieve top-K by similarity, then drop unmakeable ones | can return *nothing* if all K are unmakeable |
+| **Pre-filter** | restrict to makeable recipes first, then rank | correct, but scans far more rows |
+
+Implement both, measure recall and latency for each, and explain when you would choose which.
+This tradeoff is well known in production vector search and rarely shows up in a portfolio.
+
+> Note: the pantry can be a hand-written table. **Nothing here requires receipt scanning** —
+> the interesting engineering is the filtering, not the data entry.
+
+### Phase 7 — Receipt ingestion (optional, do last)
+
+Photo of a grocery receipt → OCR / multimodal LLM → normalized items → `PANTRY` table.
+
+This adds a genuine multimodal component and a *second* dlt source with a different shape and
+cadence, which strengthens the pipeline story. But it is also the most tedious part (real
+receipts are messy, and item names need normalizing: `"ORG BAN 3LB"` → `banana`), and it adds
+no retrieval-quality insight. **Build it only after Phases 5 and 6 are done.**
 
 ---
 
@@ -168,8 +226,14 @@ which is a common and hard-to-debug mistake.
 
 ## 8. Deliberately out of scope
 
-Already demonstrated in PantryAI, and would dilute the focus here:
+Already demonstrated in a previous project (PantryAI), and would dilute the focus here:
 - ❌ user auth / social features / meal planner
-- ❌ pantry inventory tracking — that's a separate follow-up project
+- ❌ recipe *generation* — this project retrieves real recipes; inventing them is the
+  opposite of what it is trying to prove
 
-This project is only about the **data layer and retrieval quality**.
+Pantry inventory is **not** excluded, but it enters as a *retrieval constraint* (Phase 6),
+not as an inventory-management feature. The distinction matters: the value is in filtered
+vector search, not in CRUD over a pantry list.
+
+This project is about the **data layer and retrieval quality**. Every phase should either
+improve retrieval or measure it.

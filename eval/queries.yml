@@ -1,0 +1,143 @@
+# ============================================================
+# Phase 5 evaluation set
+# ============================================================
+# HOW TO USE
+#   1. Freeze a fixed corpus subset (~200 enriched recipes) and evaluate against only that.
+#      A small fully-labeled corpus beats a large partially-labeled one.
+#   2. For each query below, fill `relevant_uids` with the uids that SHOULD be retrieved.
+#      Shortcut: have an LLM propose candidates, then verify by hand.
+#      ⚠️ If you do that, say so in the README — LLM-assisted labels bias results toward
+#         what an LLM considers similar, which is the very thing being measured.
+#   3. Run all three arms (A: raw ingredients, B: enriched, C: enriched + hybrid)
+#      and compute Recall@5 per query, then average.
+#
+#   Recall@5 = |relevant ∩ top5| / min(5, |relevant|)
+#
+# Aim for 3-5 relevant recipes per query. Queries with 0 labels are unusable; queries with
+# 20+ make Recall@5 meaningless.
+# ============================================================
+
+queries:
+  # --- sensory: the queries this project exists to answer -------------------
+  - id: q01
+    text: "something refreshing and bursting with juice"
+    category: sensory
+    relevant_uids: []
+
+  - id: q02
+    text: "rich creamy and indulgent"
+    category: sensory
+    relevant_uids: []
+
+  - id: q03
+    text: "crispy on the outside, tender inside"
+    category: sensory
+    relevant_uids: []
+
+  - id: q04
+    text: "spicy enough to make me sweat"
+    category: sensory
+    relevant_uids: []
+
+  - id: q05
+    text: "light and clean, nothing heavy"
+    category: sensory
+    relevant_uids: []
+
+  - id: q06
+    text: "warm and comforting, like a hug"
+    category: sensory
+    relevant_uids: []
+
+  # --- occasion / mood -----------------------------------------------------
+  - id: q07
+    text: "cozy dinner for a cold rainy day"
+    category: occasion
+    relevant_uids: []
+
+  - id: q08
+    text: "something to cure a hangover"
+    category: occasion
+    relevant_uids: []
+
+  - id: q09
+    text: "impressive but easy dish for guests"
+    category: occasion
+    relevant_uids: []
+
+  - id: q10
+    text: "quick lunch I can eat at my desk"
+    category: occasion
+    relevant_uids: []
+
+  - id: q11
+    text: "palate cleanser after something greasy"
+    category: occasion
+    relevant_uids: []
+
+  - id: q12
+    text: "summer picnic food that travels well"
+    category: occasion
+    relevant_uids: []
+
+  # --- constraint: where PURE VECTOR SEARCH IS EXPECTED TO STRUGGLE ---------
+  # These need exact-term matching, which is why hybrid search (arm C) should win here.
+  # If C does not beat B on this category specifically, investigate before reporting.
+  - id: q13
+    text: "vegetarian, no meat at all"
+    category: constraint
+    relevant_uids: []
+
+  - id: q14
+    text: "ready in under 30 minutes"
+    category: constraint
+    relevant_uids: []
+
+  - id: q15
+    text: "no oven required"
+    category: constraint
+    relevant_uids: []
+
+  - id: q16
+    text: "chocolate dessert"
+    category: constraint
+    relevant_uids: []
+
+  # --- cross-lingual: Korean query against the English corpus ---------------
+  # Tests that the multilingual embedding model actually earns its place.
+  # If these score near zero, the wrong model is configured.
+  - id: q17
+    text: "상큼하고 과즙이 터지는"
+    category: cross_lingual
+    relevant_uids: []
+
+  - id: q18
+    text: "해장되는 뜨끈한 국물"
+    category: cross_lingual
+    relevant_uids: []
+
+  - id: q19
+    text: "비 오는 날 어울리는 따뜻한 음식"
+    category: cross_lingual
+    relevant_uids: []
+
+  - id: q20
+    text: "느끼한 거 먹고 난 다음 입가심"
+    category: cross_lingual
+    relevant_uids: []
+
+# ============================================================
+# Report template (fill in after running — put this in the README)
+# ============================================================
+# | Arm | Recall@5 | Indexing credits | Cost / query |
+# |-----|----------|------------------|--------------|
+# | A — raw ingredients, vector      |  |  |  |
+# | B — enriched profile, vector     |  |  |  |
+# | C — enriched profile, hybrid     |  |  |  |
+#
+# Break Recall@5 down BY CATEGORY too. The headline average hides the interesting story:
+# the expected result is B >> A on sensory, and C >> B on constraint.
+# If the per-category pattern does not match that, the explanation is the finding.
+#
+# Worst 3-5 queries + one-line diagnosis each:
+#   - qNN: ...
