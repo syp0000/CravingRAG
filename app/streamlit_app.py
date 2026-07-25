@@ -87,5 +87,20 @@ if query:
             st.caption(r["FLAVOR_PROFILE"])
             st.divider()
 
-# TODO (improvement): if every similarity is low (say < 0.5), say "no good match found"
-#   instead of recommending anyway. Without this guard, RAG confidently returns junk.
+# TODO (improvement): when nothing is a good match, say so instead of recommending anyway.
+#
+# Do NOT use an absolute threshold for this. Measured on this corpus:
+#     same meaning, both English   0.770
+#     same meaning, Korean/English 0.683
+#     OPPOSITE meaning             0.495
+# Cosine similarities sit in a narrow band, so 0.495 is what *unrelated* text scores —
+# a "< 0.5 = no match" rule would reject nearly everything. Absolute values do not mean
+# what intuition suggests; only the ranking is trustworthy.
+#
+# Use a relative signal instead: compare the top score against the median of the top 50,
+# or flag results where the gap between rank 1 and rank 10 is small (meaning the corpus
+# has nothing that stands out for this query).
+#
+# Note also that cross-lingual pairs score ~0.09 lower than same-language pairs at equal
+# meaning. Korean queries carry a built-in handicap, which is worth reporting in Phase 5
+# as a per-category breakdown rather than averaging it away.
