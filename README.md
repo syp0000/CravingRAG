@@ -126,7 +126,8 @@ Run the phases in order. Each one is independently verifiable.
 - [ ] Phase 4 — grounded generation + Streamlit UI
 - [ ] Phase 5 — ⭐ evaluation: 3-arm Recall@5 benchmark (`eval/queries.yml`)
 - [ ] Phase 6 — constrained retrieval: pantry filter, pre-filter vs post-filter
-- [ ] Phase 7 — receipt photo → pantry (multimodal, optional, do last)
+- [ ] Phase 7 — receipt photo → pantry (multimodal, optional)
+- [ ] Phase 8 — live REST API source (dlt rest_api) — grounds international dishes
 
 ---
 

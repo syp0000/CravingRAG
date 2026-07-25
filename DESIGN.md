@@ -55,6 +55,39 @@ Now embedding `"refreshing and bursting with juice"` lands **close** to that vec
 > Using an LLM at *indexing* time — not just at answer time — is the technical heart of this
 > project, and the thing worth explaining in an interview.
 
+### The risk this creates: hallucination at index time
+
+Enrichment has a failure mode that plain RAG does not, and it is worth stating up front.
+
+**Index-time hallucination is worse than answer-time hallucination**, because it is invisible.
+A wrong *answer* can be caught by showing the user its sources. A wrong *flavor profile*
+becomes a vector, silently corrupts retrieval for every future query, and no one ever sees the
+sentence that caused it.
+
+It is also **systematically biased**. The quality of a profile depends on how much source
+detail the model was given:
+
+| Source | Input to the LLM | Result |
+|---|---|---|
+| Epicurious | full ingredients + instructions | grounded |
+| worldcuisines | a ~180-character description | model fills gaps from memory |
+
+And a model's memory is thinner for non-Western dishes — precisely the ones the cross-lingual
+queries target. Observed early: jjinppang (a Korean steamed bun) was described as having
+"earthy sweetness", which no one who has eaten one would say.
+
+Two mitigations, both in `sql/02_enrich.sql`:
+1. A **grounding clause** in the prompt: make every flavor claim traceable to the provided
+   text, and stay general instead of inventing when the text is thin.
+2. A **spot-check query** that shows source text and generated profile side by side, sorted by
+   least source detail first. Domain knowledge is the only real detector — check the cuisines
+   you know best.
+
+The honest tension: grounding makes thin-source profiles blander, and blander profiles retrieve
+worse. That tradeoff should be **measured per source** in Phase 5, not assumed away. The real
+fix is giving the international dishes more source detail (see the REST API source idea in
+Phase 8) rather than prompting harder.
+
 ---
 
 ## 3. End-to-end data flow
@@ -211,6 +244,26 @@ This adds a genuine multimodal component and a *second* dlt source with a differ
 cadence, which strengthens the pipeline story. But it is also the most tedious part (real
 receipts are messy, and item names need normalizing: `"ORG BAN 3LB"` → `banana`), and it adds
 no retrieval-quality insight. **Build it only after Phases 5 and 6 are done.**
+
+### Phase 8 — Live REST API source (the most transferable skill here)
+
+Both current sources are static CSVs downloaded once. A real ingestion pipeline pulls from a
+live API with pagination, rate limits, and incremental loading — which is what dlt's
+`rest_api` source is built for, and the single most transferable piece of this project to a
+data-engineering role.
+
+Good target: **TheMealDB** — a free public API covering ~195 cuisines/areas, with ingredients
+per dish. Wikipedia and Wikidata APIs are also fair game.
+
+This is not only about realism. It is the actual fix for the index-time hallucination problem
+above: international dishes currently have only a short description to work from, so the model
+invents. An API that supplies real ingredients per dish gives the enrichment step something to
+be grounded in, which no amount of prompt tuning can substitute for.
+
+> **Do not scrape HTML for this.** Most recipe sites prohibit scraping in their terms, and a
+> terms-violating scraper sitting in a portfolio repo reads as a judgment problem to a hiring
+> manager rather than as initiative. Public APIs and published `schema.org/Recipe` JSON-LD are
+> designed to be consumed; use those.
 
 ---
 

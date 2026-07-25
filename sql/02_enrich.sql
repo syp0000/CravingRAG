@@ -69,6 +69,15 @@ SELECT
             '(crispy/juicy/creamy/chewy), temperature, and what occasion or ',
             'mood it suits. Do NOT list ingredients or steps. ',
             'Be vivid and sensory.\n\n',
+            -- Grounding clause. Without this, a thin source description makes the model
+            -- fill the gaps from its own memory of the dish, and it is confidently wrong
+            -- more often for non-Western dishes — exactly the ones the cross-lingual
+            -- queries target. A hallucinated profile silently corrupts the vector and
+            -- nobody ever sees it, unlike a hallucinated answer.
+            'IMPORTANT: base every flavor claim on the text provided below. ',
+            'If the text does not support a specific taste or texture, stay general ',
+            'rather than inventing a detail. Do not guess at flavors you cannot justify ',
+            'from the text.\n\n',
             'Dish: ', title, '\n',
             detail
         )
@@ -93,6 +102,26 @@ LIMIT 20;
 
 -- Sanity check: both sources present?
 SELECT source, COUNT(*) FROM ENRICHED.RECIPE_PROFILES GROUP BY source;
+
+
+-- ------------------------------------------------------------
+-- ⚠️ GROUNDING SPOT CHECK — run this every time you change the prompt
+-- ------------------------------------------------------------
+-- Read the source text and the generated profile side by side and ask:
+-- "is every flavor claim actually supported by the text on the left?"
+--
+-- Do this for dishes you personally know. A profile can read beautifully and still
+-- be wrong — the first version of this prompt called jjinppang "earthy", which no
+-- one who has eaten one would say. Domain knowledge is the only detector here, so
+-- check the cuisines you know best.
+SELECT
+    title,
+    LEFT(detail, 300)  AS source_text,
+    flavor_profile
+FROM ENRICHED.RECIPE_PROFILES
+WHERE source = 'worldcuisines'      -- the thin-input source, most at risk
+ORDER BY LENGTH(detail) ASC          -- least source detail first = most invention
+LIMIT 10;
 
 -- TODO (learning): if the profiles read flat or generic, edit the prompt above and rerun.
 --   A single prompt line can noticeably change retrieval quality — this is exactly why
