@@ -18,14 +18,16 @@ SELECT
     dish_id,
     title,
     source,
-    -- Recombine the two enrichment fields into the text we actually index.
+    -- Recombine into the text we actually index. The TITLE is included deliberately:
+    -- it is free (no LLM call) and often carries the dish category that a query is
+    -- really asking for -- "Kal-guksu", "...Buttermilk Soup", "Chicken Tikka".
     -- Phase 5 can embed sensory_profile alone as an extra arm to measure what the
     -- inferred context contributes.
-    sensory_profile || ' ' || context_profile AS flavor_profile,
+    title || '. ' || sensory_profile || ' ' || context_profile AS flavor_profile,
 
     -- 👇 the embedding step: text → VECTOR(FLOAT, 1024)
     AI_EMBED('snowflake-arctic-embed-l-v2.0',
-             sensory_profile || ' ' || context_profile) AS profile_vec
+             title || '. ' || sensory_profile || ' ' || context_profile) AS profile_vec
 
 FROM ENRICHED.RECIPE_PROFILES
 WHERE sensory_profile IS NOT NULL AND context_profile IS NOT NULL;

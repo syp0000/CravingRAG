@@ -77,8 +77,16 @@ SELECT
     SNOWFLAKE.CORTEX.COMPLETE(
         'mistral-large2',
         CONCAT(
-            'You are a food writer. In 2 sentences, describe ONLY the taste ',
-            '(sweet/sour/spicy/rich) and texture (crispy/juicy/creamy/chewy) of this dish. ',
+            -- Lead with WHAT THE DISH IS. The previous version asked for taste and
+            -- texture only, which stripped the dish's identity out of the indexed text:
+            -- kal-guksu's profile never contained the word "soup" or "broth", so a query
+            -- for "warm broth" could not match it. Meanwhile "Red Chile Hot Sauce" ranked
+            -- highly because "hot" appears literally in its text. The embedding described
+            -- how things taste but not what they are.
+            'You are a food writer. Start by naming what kind of dish this is in a few ',
+            'words (for example: a hot noodle soup, a chilled salad, a fried pastry, ',
+            'a grilled meat skewer). Then, in 2 sentences, describe the taste ',
+            '(sweet/sour/spicy/rich) and texture (crispy/juicy/creamy/chewy). ',
             'Every claim must be supported by the text below. If the text does not ',
             'indicate a flavor or texture, stay general rather than inventing one. ',
             -- Texture must follow the COOKING METHOD, not the raw ingredient. Without

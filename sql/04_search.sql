@@ -103,6 +103,35 @@ WHERE flavor_profile ILIKE '%broth%'
 LIMIT 20;
 
 -- ------------------------------------------------------------
+-- 🪜 ISOLATION LADDER — run these in order when a query disappoints
+-- ------------------------------------------------------------
+-- '해장되는 뜨끈한 국물' failing tells you almost nothing on its own, because three
+-- different things could cause it. Change one variable at a time instead:
+--
+--   1. 'hot noodle soup'              plain English, plain dish type
+--        fails → the indexed text does not describe dish types. Fix 02_enrich.
+--        works → go to 2.
+--
+--   2. 'warm broth to cure a hangover'  English, but an abstract concept
+--        fails → "hangover" is not expressible from the source data; no profile
+--                 will ever mention it. Narrow the query or accept the limit.
+--        works → go to 3.
+--
+--   3. '해장되는 뜨끈한 국물'            the original
+--        fails → genuinely a cross-lingual gap. Cross-lingual pairs already score
+--                 ~0.09 lower at equal meaning, so this is plausible.
+--
+-- Whichever step first fails is the one to fix. Do not tune more than one at a time.
+SET user_query = 'hot noodle soup';                    -- step 1
+-- SET user_query = 'warm broth to cure a hangover';   -- step 2
+-- SET user_query = '해장되는 뜨끈한 국물';               -- step 3
+
+-- Also worth knowing: "hot" is ambiguous in English (temperature vs spicy), which is
+-- why hot sauces and vindaloo rank for a query about warm broth. If step 1 works but
+-- results skew spicy, try 'warm comforting noodle soup' — a wording that cannot be
+-- read as spicy — to confirm that is what is happening.
+
+-- ------------------------------------------------------------
 -- If a query returns poor results AND the corpus does contain good candidates, THEN it
 -- is a signal to improve the prompt in 02_enrich.sql — not the search query itself.
 
