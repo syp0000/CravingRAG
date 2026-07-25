@@ -38,8 +38,13 @@ WITH all_dishes AS (
         title,
         'epicurious'                            AS source,
         NULL                                    AS cuisine,
-        'Ingredients: ' || LEFT(ingredients, 700)
-            || '\nInstructions: ' || LEFT(instructions, 700)  AS detail
+        -- Instructions are cut harder than ingredients: flavor comes mostly from what
+        -- is in the dish, while the method matters only for texture, which the first
+        -- couple of steps already reveal. Epicurious detail averages ~1,015 characters
+        -- and dominates the token bill, so this trims roughly a third off the cost and
+        -- buys a proportionally larger sample.
+        'Ingredients: ' || LEFT(ingredients, 600)
+            || '\nMethod: ' || LEFT(instructions, 300)  AS detail
     FROM raw.recipes                    -- 👈 adjust case if step ⓪ shows otherwise
 
     UNION ALL
@@ -77,32 +82,41 @@ SELECT
     SNOWFLAKE.CORTEX.COMPLETE(
         'mistral-large2',
         CONCAT(
-            -- Lead with WHAT THE DISH IS. The previous version asked for taste and
-            -- texture only, which stripped the dish's identity out of the indexed text:
-            -- kal-guksu's profile never contained the word "soup" or "broth", so a query
-            -- for "warm broth" could not match it. Meanwhile "Red Chile Hot Sauce" ranked
-            -- highly because "hot" appears literally in its text. The embedding described
-            -- how things taste but not what they are.
-            'You are a food writer. Start by naming what kind of dish this is in a few ',
-            'words (for example: a hot noodle soup, a chilled salad, a fried pastry, ',
-            'a grilled meat skewer). Then, in 2 sentences, describe the taste ',
-            '(sweet/sour/spicy/rich) and texture (crispy/juicy/creamy/chewy). ',
-            'Every claim must be supported by the text below. If the text does not ',
-            'indicate a flavor or texture, stay general rather than inventing one. ',
+            -- ⚠️ WRITE FOR AN EMBEDDING, NOT FOR A READER.
+            --
+            -- The prose version of this prompt produced beautiful, useless text. Every
+            -- profile came out as "This dish is a harmonious blend of X and Y, with a
+            -- subtle hint of Z" — the same skeleton with different adjectives slotted in.
+            -- Embedded, those documents look nearly identical: the top 10 results for a
+            -- query spanned only 0.516 to 0.416, so a fried pastry scored about as well
+            -- as a fruit slush for "refreshing and bursting with juice".
+            --
+            -- The shared scaffolding ("this dish is", "a blend of", "a subtle hint of")
+            -- is most of the token count and carries no information, so it dominates the
+            -- vector while the part that actually distinguishes dishes gets diluted.
+            --
+            -- Terse, noun-dense text embeds far better. Fluency is worth nothing here;
+            -- nobody reads these.
+            'Write a compact search description for this dish. ',
+            'Format exactly, four short parts separated by periods:\n',
+            '<what kind of dish it is>. <taste words>. <texture words>. ',
+            '<the few ingredients that define its flavor>.\n\n',
+            'Example: "Chilled citrus fruit salad. Bright, tart, sweet. Juicy, crisp, ',
+            'watery. Orange, grapefruit, mint."\n',
+            'Example: "Hot spicy noodle soup. Savory, fiery, deep. Chewy noodles, ',
+            'soft vegetables, brothy. Gochugaru, seafood, wheat noodles."\n\n',
+            'Rules:\n',
+            '- NEVER write "this dish", "harmonious", "delightful", "subtle", ',
+            '"offers", "boasts", or any full sentence.\n',
+            '- Use concrete, specific words a person would actually search for.\n',
             -- Texture must follow the COOKING METHOD, not the raw ingredient. Without
             -- this the model reads "vegetables" and writes "crunchy" even for a
-            -- simmered stew, and reads "rice powder" and writes "crumbly" for songpyeon,
-            -- which is chewy. It infers texture from what an ingredient is like before
-            -- it is cooked.
-            'Texture must reflect how the dish is COOKED, not how the raw ingredients ',
-            'would feel. Vegetables simmered in a stew are soft, not crunchy; a steamed ',
-            'dough is chewy, not crumbly. ',
-            -- Guards against the model's stock phrases. "juicy crunch" appeared in three
-            -- unrelated dishes in one sample of ten — that is a verbal tic, not an
-            -- observation about any of them.
-            'Avoid stock phrases. Describe THIS dish specifically. ',
-            'Do NOT mention serving temperature or occasion. ',
-            'Do NOT list ingredients or steps.\n\n',
+            -- simmered stew, and "rice powder" as "crumbly" for songpyeon, which is chewy.
+            '- Texture must match how it is COOKED, not the raw ingredients. Vegetables ',
+            'simmered in a stew are soft, not crunchy; steamed dough is chewy, not crumbly.\n',
+            '- Base every flavor word on the text below. If the text does not support ',
+            'a flavor, leave it out rather than inventing one.\n',
+            '- Do NOT mention serving temperature or occasion.\n\n',
             'Dish: ', title, '\n',
             detail
         )
@@ -113,9 +127,14 @@ SELECT
     SNOWFLAKE.CORTEX.COMPLETE(
         'mistral-large2',
         CONCAT(
-            'In ONE sentence, state when someone would eat this dish: serving temperature, ',
-            'season, occasion, or mood. If you are not confident, say only what you are ',
-            'sure of and keep it general. Do not invent specific cultural claims.\n\n',
+            -- Terse here too, for the same reason: "Someone would eat this when they
+            -- want a warm, comforting meal" is 12 words of scaffolding around 2 words
+            -- of signal.
+            'List when this dish is eaten, as short phrases separated by commas. ',
+            'Cover: serving temperature, season, meal, occasion. No sentences.\n',
+            'Example: "Served hot. Winter. Lunch or dinner. Comfort food, hangover cure."\n',
+            'Example: "Served cold. Summer. Dessert or snack. Refreshing, casual."\n',
+            'If you are not confident about an item, leave it out.\n\n',
             'Dish: ', title, '\n',
             detail
         )
@@ -145,7 +164,7 @@ FROM all_dishes
 QUALIFY ROW_NUMBER() OVER (PARTITION BY source ORDER BY RANDOM())
         <= CASE source
                WHEN 'worldcuisines' THEN 999999   -- all of it
-               ELSE 1000                          -- sample; raise once Phase 3 works
+               ELSE 4000                          -- sample; cheaper per row now that detail is trimmed
            END;
 
 
