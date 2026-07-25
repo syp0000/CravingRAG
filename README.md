@@ -44,6 +44,22 @@ HuggingFace recipe_nlg_lite (7,198 recipes)
 
 ---
 
+## Where each piece runs
+
+This trips people up, so it is worth stating plainly: **dlt does not run inside Snowflake.**
+dlt is the client that pulls data from an external source and pushes it *into* Snowflake, so it
+runs on your laptop. Only the SQL runs in Snowflake.
+
+| Component | Runs where | Why |
+|---|---|---|
+| `pipelines/load_recipes.py` (dlt) | **your laptop** (venv) | needs internet access to HuggingFace; writes into Snowflake as a client |
+| `sql/*.sql` | **Snowflake** (Snowsight worksheet) | Cortex functions and vectors live in the warehouse |
+| `app/streamlit_app.py` | your laptop (or Streamlit in Snowflake later) | queries Snowflake as a client |
+
+> Running the dlt script in a Snowflake notebook will fail with `ModuleNotFoundError: No module
+> named 'dlt'`. Do not install dlt into the notebook to fix that — a Snowflake notebook has no
+> outbound internet access by default, so it could not reach HuggingFace anyway. Run it locally.
+
 ## Setup
 
 ### 1. Snowflake account
@@ -68,10 +84,15 @@ database  = "CRAVING_RAG"
 role      = "ACCOUNTADMIN"
 ```
 
-dlt reads credentials separately — create `.dlt/secrets.toml` with the same values under
-`[destination.snowflake.credentials]`.
+dlt reads credentials separately. Copy the template and fill it in:
+```bash
+cp .dlt/example.secrets.toml .dlt/secrets.toml
+```
 
-> Both files are gitignored. Never commit credentials.
+> ⚠️ In `.dlt/secrets.toml`, `host` is the **account identifier** (`kgiotue-wn98412`), not the
+> full URL. This is the most common setup mistake.
+
+> Both `connections.toml` and `.dlt/secrets.toml` are gitignored. Never commit credentials.
 
 ---
 

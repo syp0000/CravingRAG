@@ -44,6 +44,22 @@ HuggingFace recipe_nlg_lite (레시피 7,198개)
 
 ---
 
+## 각 부분이 어디서 도는가
+
+여기서 많이 헷갈리니 분명히 짚고 갑니다: **dlt는 Snowflake 안에서 돌지 않습니다.**
+dlt는 외부 소스에서 데이터를 가져와 Snowflake *안으로 밀어넣는* 클라이언트라서, 내 노트북에서
+돕니다. Snowflake에서 도는 건 SQL뿐입니다.
+
+| 구성요소 | 실행 위치 | 이유 |
+|---|---|---|
+| `pipelines/load_recipes.py` (dlt) | **내 노트북** (venv) | HuggingFace에 인터넷 접속 필요, Snowflake에는 클라이언트로 접속해 적재 |
+| `sql/*.sql` | **Snowflake** (Snowsight 워크시트) | Cortex 함수와 벡터는 웨어하우스 안에 있음 |
+| `app/streamlit_app.py` | 내 노트북 (또는 나중에 Streamlit in Snowflake) | Snowflake에 클라이언트로 질의 |
+
+> dlt 스크립트를 Snowflake 노트북에서 돌리면 `ModuleNotFoundError: No module named 'dlt'` 가
+> 납니다. **이걸 고치려고 노트북에 dlt를 설치하지 마세요** — Snowflake 노트북은 기본적으로
+> 외부 인터넷 접속이 막혀 있어서 어차피 HuggingFace에 못 갑니다. 로컬에서 실행하세요.
+
 ## 세팅
 
 ### 1. Snowflake 계정
@@ -68,10 +84,15 @@ database  = "CRAVING_RAG"
 role      = "ACCOUNTADMIN"
 ```
 
-dlt는 별도로 자격증명을 읽습니다 — `.dlt/secrets.toml` 에 같은 값을
-`[destination.snowflake.credentials]` 아래에 넣어주세요.
+dlt는 자격증명을 별도로 읽습니다. 템플릿을 복사해서 채우세요:
+```bash
+cp .dlt/example.secrets.toml .dlt/secrets.toml
+```
 
-> 두 파일 모두 gitignore 되어 있습니다. **절대 커밋하지 마세요.**
+> ⚠️ `.dlt/secrets.toml` 의 `host` 는 **계정 식별자**(`kgiotue-wn98412`)이지 전체 URL이 아닙니다.
+> 여기서 제일 많이 틀립니다.
+
+> `connections.toml` 과 `.dlt/secrets.toml` 둘 다 gitignore 되어 있습니다. **절대 커밋하지 마세요.**
 
 ---
 
