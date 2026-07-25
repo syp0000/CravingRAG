@@ -1,0 +1,4 @@
+dlt[snowflake]>=1.0
+datasets>=2.20
+streamlit>=1.38
+snowflake-snowpark-python>=1.20
