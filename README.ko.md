@@ -89,8 +89,11 @@ dlt는 자격증명을 별도로 읽습니다. 템플릿을 복사해서 채우�
 cp .dlt/example.secrets.toml .dlt/secrets.toml
 ```
 
-> ⚠️ `.dlt/secrets.toml` 의 `host` 는 **계정 식별자**(`kgiotue-wn98412`)이지 전체 URL이 아닙니다.
-> 여기서 제일 많이 틀립니다.
+> ⚠️ 여기서 두 가지가 꼭 문제가 됩니다:
+> 1. `host` 는 **계정 식별자**(`kgiotue-wn98412`)이지 전체 URL이 아닙니다.
+> 2. **비밀번호 인증은 안 됩니다.** Snowflake가 MFA를 강제해서 프로그래매틱 접속이 거부됩니다
+>    (`MFA authentication is required...`). **키페어 인증**을 쓰세요 —
+>    `.dlt/example.secrets.toml` 에 세팅 명령 3줄이 있습니다.
 
 > `connections.toml` 과 `.dlt/secrets.toml` 둘 다 gitignore 되어 있습니다. **절대 커밋하지 마세요.**
 

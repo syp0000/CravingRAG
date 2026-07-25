@@ -89,8 +89,11 @@ dlt reads credentials separately. Copy the template and fill it in:
 cp .dlt/example.secrets.toml .dlt/secrets.toml
 ```
 
-> ⚠️ In `.dlt/secrets.toml`, `host` is the **account identifier** (`kgiotue-wn98412`), not the
-> full URL. This is the most common setup mistake.
+> ⚠️ Two things reliably go wrong here:
+> 1. `host` is the **account identifier** (`kgiotue-wn98412`), not the full URL.
+> 2. **Password auth will not work.** Snowflake enforces MFA and rejects password-based
+>    programmatic connections (`MFA authentication is required...`). Use **key pair auth** —
+>    `.dlt/example.secrets.toml` has the three commands to set it up.
 
 > Both `connections.toml` and `.dlt/secrets.toml` are gitignored. Never commit credentials.
 
