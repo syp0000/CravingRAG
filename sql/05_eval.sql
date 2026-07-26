@@ -5,6 +5,18 @@
 -- quality and can defend the design". Run it only once the pipeline has stopped
 -- changing — an evaluation of a moving target has to be redone.
 --
+-- ⚠️ DO NOT "Run All" ON THIS FILE.
+--   It spans a manual step, so the statements are not meant to run in one pass:
+--     ① ② ③  create tables      → no result set, just "Table created"
+--     ④        list what to judge → ⬅ RUN THIS ONE, export it, judge it
+--     ─────── you fill in EVAL.JUDGMENTS by hand ───────
+--     ⑤ ⑥      compute scores     → empty until judgments exist
+--   Running the whole file shows only the last statement's output, which is an empty
+--   score table. That is expected, not a failure.
+--
+-- Note: eval/queries.yml is a local reference file. Snowflake never reads it — the
+-- query set is inlined in the INSERT in step ① below.
+--
 -- METHOD: pooled relevance judgment.
 --   Labelling which of 2,000+ dishes are relevant to each query is impossible by hand.
 --   Instead, run every arm, pool their top-10 results, and judge only the pool — about
@@ -114,6 +126,13 @@ CREATE TABLE IF NOT EXISTS EVAL.JUDGMENTS (
     relevant INT          -- 1 = acceptable answer, 0 = not
 );
 -- Load your judged rows here (Snowsight: table → Load Data, from CSV).
+
+
+-- ============================================================
+-- 🛑 STOP HERE until EVAL.JUDGMENTS has rows.
+--    Everything below reads it and returns nothing while it is empty.
+--    Check with:  SELECT COUNT(*) FROM EVAL.JUDGMENTS;
+-- ============================================================
 
 
 -- ------------------------------------------------------------
