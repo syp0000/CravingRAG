@@ -51,7 +51,22 @@ INSERT INTO EVAL.QUERIES VALUES
 
 
 -- ------------------------------------------------------------
--- ② Build the pool: top 10 per query, per arm.
+-- ② Embed the queries ONCE.
+-- ------------------------------------------------------------
+-- Do not call AI_EMBED inside the join below. The query text only takes 20 distinct
+-- values, but inlined into a cross join against ~6,000 dishes the optimizer may
+-- evaluate it per row — 120,000 embedding calls instead of 20. Materialize first.
+CREATE OR REPLACE TABLE EVAL.QUERY_VECTORS AS
+SELECT
+    query_id,
+    query_text,
+    category,
+    AI_EMBED('snowflake-arctic-embed-l-v2.0', query_text) AS query_vec
+FROM EVAL.QUERIES;
+
+
+-- ------------------------------------------------------------
+-- ③ Build the pool: top 10 per query, per arm.
 -- ------------------------------------------------------------
 -- Start with the arm you have (B). Add rows for A / C / D as you build them by
 -- re-running this against a different vector table and changing the arm label.
@@ -63,22 +78,16 @@ SELECT
     v.title,
     ROW_NUMBER() OVER (
         PARTITION BY q.query_id
-        ORDER BY VECTOR_COSINE_SIMILARITY(
-            v.profile_vec,
-            AI_EMBED('snowflake-arctic-embed-l-v2.0', q.query_text)
-        ) DESC
+        ORDER BY VECTOR_COSINE_SIMILARITY(v.profile_vec, q.query_vec) DESC
     ) AS rank,
-    VECTOR_COSINE_SIMILARITY(
-        v.profile_vec,
-        AI_EMBED('snowflake-arctic-embed-l-v2.0', q.query_text)
-    ) AS similarity
-FROM EVAL.QUERIES q
+    VECTOR_COSINE_SIMILARITY(v.profile_vec, q.query_vec) AS similarity
+FROM EVAL.QUERY_VECTORS q
 CROSS JOIN SEARCH.RECIPE_VECTORS v
 QUALIFY rank <= 10;
 
 
 -- ------------------------------------------------------------
--- ③ The pool to judge. THIS IS THE MANUAL PART.
+-- ④ The pool to judge. THIS IS THE MANUAL PART.
 -- ------------------------------------------------------------
 -- Export this, add a `relevant` column (1 or 0), and load it back into EVAL.JUDGMENTS.
 -- Deduplicated across arms, so a dish retrieved by three arms is judged once.
@@ -108,7 +117,7 @@ CREATE TABLE IF NOT EXISTS EVAL.JUDGMENTS (
 
 
 -- ------------------------------------------------------------
--- ④ Recall@5 — the headline metric
+-- ⑤ Recall@5 — the headline metric
 -- ------------------------------------------------------------
 -- Recall@5 = relevant dishes in the top 5 / min(5, total relevant known for that query)
 CREATE OR REPLACE VIEW EVAL.RECALL_AT_5 AS
@@ -138,7 +147,7 @@ JOIN EVAL.QUERIES q USING (query_id);
 
 
 -- ------------------------------------------------------------
--- ⑤ The results to report
+-- ⑥ The results to report
 -- ------------------------------------------------------------
 -- Headline: one number per arm
 SELECT arm, ROUND(AVG(recall_at_5), 3) AS mean_recall_at_5
