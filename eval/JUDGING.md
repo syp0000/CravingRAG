@@ -52,6 +52,27 @@ mark it down as a retrieval miss. The two are fixed in different places.
 5. **Near-categories count if the stated attributes hold.** A stew for a "broth" query is
    `1` when it is hot and liquid. Category boundaries are fuzzy; stated attributes are not.
 
+6. **Texture phrases imply a physical form, and that form is a stated attribute.**
+   "Bursting with juice" describes biting something solid and having liquid released —
+   cherry tomatoes, a peach, watermelon. A drink is already liquid, so nothing can burst:
+   a margarita is `0` for *"something refreshing and bursting with juice"*, even though it
+   is unambiguously refreshing.
+
+   This interacts with rule 2 and rule 3 in a way worth being explicit about. Rule 2 says
+   not to invent restrictions the user did not state — and "no drinks" was indeed not
+   stated. But "bursting with juice" *is* stated, and it entails a solid. Rule 3 governs:
+   a topical match does not excuse a missed attribute.
+
+   The same reading applies to "crispy on the outside, tender inside", which conventionally
+   describes fried or roasted protein. A croissant is flaky, not crispy-outside-tender-
+   inside in the sense the phrase carries.
+
+   **These two are the clearest limitation this project found.** Embeddings capture word
+   meaning but not the conventional referent of a phrase, so a compound sensory query gets
+   treated as a bag of concepts — "refreshing" matches hard, and the textural half is
+   quietly dropped. Unlike the other failures, this one is not fixable by better prompting
+   or more corpus; it is a property of the representation. Report it as such.
+
 ## Sanity check while judging
 
 If more than ~80% of the pool is coming out as `1`, the bar is too low — every arm will
