@@ -314,7 +314,75 @@ be grounded in, which no amount of prompt tuning can substitute for.
 
 ---
 
-## 7. Resume line
+## 7. Findings
+
+Everything below was observed on this corpus and, where stated, reproduced with a
+controlled experiment. They fall into three groups, and the grouping is itself the point:
+**most failures were design mistakes, a few are properties of the technology, and telling
+them apart is a skill of its own.**
+
+### A. Failures caused by how the text was indexed — all fixable
+
+| Finding | Evidence | Fix |
+|---|---|---|
+| Prose format destroys retrieval | Top-10 compressed into 0.516–0.416; a fried pastry scored like a fruit slush | Terse noun-dense profiles → 9/10 relevant |
+| Dish identity must be in the indexed text | "describe ONLY taste and texture" removed the words *soup* and *broth*, so kal-guksu could not match "warm broth" | Name the dish type first |
+| Enrichment hallucinates when the source is thin | Jjinppang described as "earthy"; stuffed melon as "cool" alongside "warm stuffing" | Grounding clause; drop sources under 80 chars |
+| Generic profiles become hubs | "Nice biscuit" appeared in 6 of 20 query pools, including two contradictory ones | Terse format cut hubs to 2 of 200 pool entries |
+
+### B. Failures inherent to vector retrieval — not fixable by prompting
+
+**Ranking collapses onto lexical overlap.** For *"something refreshing and bursting with
+juice"*, the twelve candidates partitioned perfectly by whether their profile contained the
+literal word "refreshing": ranks 1–7 all did, ranks 8–12 all did not. Whether a profile said
+"juicy" predicted nothing. A tomato salad whose profile literally reads *"Juicy, crunchy,
+creamy"* lost to margaritas.
+
+**Ingredient and texture are not distinguished.** A margarita listing *"lime juice"* as an
+ingredient outranks a tomato salad described as *"juicy"*. Removing "refreshing" from the
+query did not flip this — the drinks match "juice" lexically too.
+
+**Vocabulary outside the corpus fails entirely.** Querying *"firm food that squirts liquid
+when you bite into it"* returned water biscuits, breadsticks and digestive biscuits — dry
+goods, the opposite of the request. No profile contains "squirts", so the model fell back to
+matching "firm". The concept exists in the corpus ("juicy"); the wording does not.
+
+**Negation is not representable.** *"vegetarian, no meat at all"* returns a hamburger and a
+kebab. *"no oven required"* returns a soufflé and a pretzel, matching the literal token "No-"
+in titles like "No-Knead Pizza Dough" rather than the concept.
+
+**Idiomatic phrases lose their conventional referent.** *"crispy on the outside, tender
+inside"* conventionally describes fried or roasted protein; it returned croissants and Nice
+biscuits. The embedding captures word meaning but not what the phrase is used to mean.
+
+### C. Findings about how to measure honestly
+
+**Always check the corpus before blaming the retriever.** A Korean query for hangover broth
+returned vindaloo and a cold slaw, which reads as broken cross-lingual retrieval. It was not:
+only ~14% of world dishes had been enriched, so roughly 2 of 15 Korean soups existed as
+vectors. There was nothing to find. This mistake was made twice before it became a habit to
+check coverage first.
+
+**Absolute similarity is not interpretable; ranking is.** Terse profiles scored *lower* at
+rank 1 (0.494 vs 0.516) while returning far better results. Unrelated text bottoms out around
+0.495 on this model, so any threshold like "below 0.5 means no match" rejects everything.
+Within a fixed index the top score does seem to track quality — 0.606 for a query answered
+well, 0.460 for one answered badly — but that is a within-index signal only.
+
+**A right answer can come from a wrong mechanism.** "Fish ball" ranked first for the
+squirts-liquid query and is arguably a fine answer — fish balls do release broth. But its
+profile says only *"Chewy, firm"*; the system matched "firm" and got lucky. Recall counts it
+as a hit, so the metric flatters the system.
+
+**Some queries have no single right answer, which caps achievable recall.** Reasonable people
+would return different sets for *"refreshing and bursting with juice"* — cherry tomatoes,
+watermelon salad, grapefruit, agua fresca are all defensible. Without measuring
+inter-annotator agreement, a Recall@5 of 65% cannot be read: the ceiling might be 100% or it
+might be 75%. Judging a subset twice is the cheap fix and it is a stated next step.
+
+---
+
+## 8. Resume line
 
 > **CravingRAG** — Cross-lingual RAG retrieval pipeline on Snowflake Cortex. Ingested 7K
 > recipes with dlt and applied LLM-based document enrichment to generate sensory flavor
@@ -324,7 +392,7 @@ be grounded in, which no amount of prompt tuning can substitute for.
 
 ---
 
-## 8. Deliberately out of scope
+## 9. Deliberately out of scope
 
 Already demonstrated in a previous project (PantryAI), and would dilute the focus here:
 - ❌ user auth / social features / meal planner
