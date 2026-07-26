@@ -384,11 +384,30 @@ might be 75%. Judging a subset twice is the cheap fix and it is a stated next st
 
 ## 8. Resume line
 
-> **CravingRAG** — Cross-lingual RAG retrieval pipeline on Snowflake Cortex. Ingested 7K
-> recipes with dlt and applied LLM-based document enrichment to generate sensory flavor
-> profiles for indexing, enabling emotional natural-language queries ("refreshing and bursting
-> with juice") to retrieve from an English recipe corpus. Benchmarked Recall@5 of pure vector
-> search against hybrid search.
+Lead with what was learned, not with the app. The app is the apparatus; the findings are the
+work.
+
+> **CravingRAG** — A study of why RAG retrieval fails, built on Snowflake Cortex. Ingested
+> 15K dishes from two sources with dlt, indexed them via LLM document enrichment, and ran
+> controlled experiments to isolate five distinct failure modes — including a demonstration
+> that ranking collapses onto lexical overlap: the top-12 results partitioned perfectly by
+> whether a single query word appeared literally in the profile, while the semantically
+> relevant word predicted nothing. Rewriting indexed text from prose to terse noun-dense
+> form took top-10 relevance from roughly 3/10 to 9/10. Benchmarked Recall@5 across four
+> retrieval configurations using pooled relevance judgment.
+
+> ⚠️ Keep every number in that paragraph traceable to something in this repo. The 3/10 is an
+> informal count of the pre-rewrite top 10 and should be labelled as such — or replaced with
+> the measured Recall@5 once Phase 5 is done. Do not let a convenient number outrun its
+> evidence.
+
+Why this framing: "I built a recipe search app" invites the obvious objection — ChatGPT
+answers *"recommend something refreshing"* better than this ever will. That objection is
+correct and beside the point. What ChatGPT cannot do is retrieve from a corpus it has never
+seen, cite which of 15,000 specific documents matched, or be measured. The recipe corpus is a
+stand-in; the transferable output is knowing that a retrieval system returning garbage is
+usually failing at its indexing format, its corpus coverage, or its query semantics — and
+knowing how to tell which.
 
 ---
 
