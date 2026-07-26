@@ -99,6 +99,57 @@ QUALIFY rank <= 10;
 
 
 -- ------------------------------------------------------------
+-- 🧲 HUB DETECTION — dishes that match everything, and therefore nothing
+-- ------------------------------------------------------------
+-- Run this before judging. A dish that lands in the top 10 for many unrelated queries
+-- is not a good match for any of them; it sits near the centre of the vector space and
+-- gets dragged along by everything. This is a known pathology of vector search.
+--
+-- "Nice biscuit" appeared in 6 of 20 query pools. Its profile is
+-- "Sweet, buttery, mild. Crisp, crumbly. Flour, sugar, coconut." — accurate, and so
+-- unspecific that it is close to everything.
+--
+-- Note this is NOT a data-quality problem in the source. Nice biscuit is a real dish and
+-- the description is correct. The problem is that a generic profile carries no
+-- distinguishing signal, which is the same failure mode as the prose-style profiles:
+-- text that could describe many dishes embeds near all of them.
+SELECT
+    title,
+    COUNT(DISTINCT query_id)                    AS appears_in_n_queries,
+    LISTAGG(DISTINCT query_id, ', ')            AS which_queries
+FROM EVAL.RUNS
+GROUP BY title
+HAVING COUNT(DISTINCT query_id) >= 3
+ORDER BY appears_in_n_queries DESC;
+
+-- What to do with hubs is a judgement call worth stating in the README:
+--   (a) leave them and let the metric reflect reality — they are a genuine weakness
+--   (b) drop dishes whose profile is below some information threshold
+--   (c) regenerate their profiles with a prompt that demands more specificity
+-- (a) is the honest default for a first evaluation. Do not quietly delete inconvenient
+-- rows before measuring — that is tuning the corpus to the benchmark.
+
+
+-- ------------------------------------------------------------
+-- 🥬 NON-DISH ENTRIES — a smaller problem than it looks
+-- ------------------------------------------------------------
+-- Some source rows describe a *term*, an *ingredient*, or a *technique* rather than a
+-- dish, and the enrichment step happily assigns them a taste and texture anyway:
+--   Jjim  — "a cuisine term ... that refers to dishes made by steaming or boiling"
+--   Nori  — "a dried edible seaweed"
+--   Bap   — "a term for cooked rice"
+-- Measured against the source, only ~26 of 2,075 world dishes (1.3%) match these
+-- patterns, so this is real but marginal. Worth knowing the size before spending
+-- effort on it.
+SELECT dish_id, title, LEFT(detail, 120) AS source_text
+FROM ENRICHED.RECIPE_PROFILES
+WHERE source = 'worldcuisines'
+  AND (detail RLIKE '(?i).*(is a (cuisine|culinary|generic) term|refers to (a (class|category|type)|dishes)).*'
+    OR detail RLIKE '(?i).*(is an ingredient|food item made from|is a dried edible).*')
+ORDER BY title;
+
+
+-- ------------------------------------------------------------
 -- ④ The pool to judge. THIS IS THE MANUAL PART.
 -- ------------------------------------------------------------
 -- Export this, add a `relevant` column (1 or 0), and load it back into EVAL.JUDGMENTS.
