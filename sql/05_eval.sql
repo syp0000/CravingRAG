@@ -113,14 +113,34 @@ QUALIFY rank <= 10;
 -- the description is correct. The problem is that a generic profile carries no
 -- distinguishing signal, which is the same failure mode as the prose-style profiles:
 -- text that could describe many dishes embeds near all of them.
+-- ⚠️ Appearing in several queries is not by itself a defect. Caldillo de perro, a fish
+-- soup, turned up for q07 / q08 / q18 — cozy rainy day, hangover broth, and its Korean
+-- equivalent. Those are three phrasings of the same need, so that is correct behaviour,
+-- not a hub.
+--
+-- The real signal is a dish matching queries that CONTRADICT each other. "Run down"
+-- (a rich coconut stew) appeared for both q02 "rich creamy and indulgent" and q05
+-- "light and clean, nothing heavy". It cannot be a good answer to both.
 SELECT
-    title,
-    COUNT(DISTINCT query_id)                    AS appears_in_n_queries,
-    LISTAGG(DISTINCT query_id, ', ')            AS which_queries
-FROM EVAL.RUNS
-GROUP BY title
-HAVING COUNT(DISTINCT query_id) >= 3
-ORDER BY appears_in_n_queries DESC;
+    r.title,
+    COUNT(DISTINCT r.query_id)          AS appears_in_n_queries,
+    COUNT(DISTINCT q.category)          AS spans_n_categories,
+    LISTAGG(DISTINCT r.query_id, ', ')  AS which_queries
+FROM EVAL.RUNS r
+JOIN EVAL.QUERIES q USING (query_id)
+GROUP BY r.title
+HAVING COUNT(DISTINCT r.query_id) >= 3
+ORDER BY spans_n_categories DESC, appears_in_n_queries DESC;
+
+-- Read `spans_n_categories` first: a dish reaching across sensory AND occasion AND
+-- cross_lingual queries is far more suspicious than one that appears three times within
+-- a single category. Then check the actual query pairs for contradiction by hand — the
+-- automated signal narrows the list, it does not make the call.
+--
+-- Result on this corpus: only 4 dishes appear in 3+ queries, and of those only two look
+-- like genuine hubs. Worth noting in the README that the terse-profile rewrite is what
+-- fixed this — under the earlier prose format nearly everything was a hub, which is why
+-- the top-10 similarities compressed into a 0.1 band.
 
 -- What to do with hubs is a judgement call worth stating in the README:
 --   (a) leave them and let the metric reflect reality — they are a genuine weakness
