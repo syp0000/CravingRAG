@@ -55,6 +55,46 @@ Now embedding `"refreshing and bursting with juice"` lands **close** to that vec
 > Using an LLM at *indexing* time — not just at answer time — is the technical heart of this
 > project, and the thing worth explaining in an interview.
 
+### Write for the embedding, not for a reader
+
+The single largest quality jump in this project came from changing the *format* of the
+generated profiles, not their accuracy.
+
+The first version asked for a vivid two-sentence description. It produced good prose:
+
+> "This dish is a harmonious blend of sweet and tangy flavors, with a subtle hint of
+> saltiness. The texture is velvety and smooth..."
+
+Accurate, readable, and nearly useless. Every profile came out on the same skeleton —
+*"This dish is a [X] blend of [Y] and [Z], with a subtle hint of [W]"* — so embedded, all
+documents looked alike. The shared scaffolding is most of the token count and carries no
+information, and it dominated the vector while the part that actually distinguishes a
+fruit slush from a fried pastry got diluted.
+
+The symptom was visible in the scores: the top 10 results for *"something refreshing and
+bursting with juice"* spanned only 0.516 to 0.416, and included a fried beaver tail, a
+taco, and hot water crust pastry.
+
+Rewriting the prompt to emit terse, noun-dense text fixed it:
+
+> "Sorbet. Frozen fruit dessert. Sweet, tangy, refreshing. Smooth, icy, light.
+> Fruit juice, fruit purée, honey."
+
+Same model, same corpus, same embedding model. 9 of the top 10 became genuinely
+refreshing dishes.
+
+**Two counterintuitive lessons worth stating explicitly:**
+
+1. **Fluency is worthless here and actively harmful.** Nobody reads an indexed document.
+   Grammatical scaffolding costs tokens and adds no retrievable signal.
+2. **The top similarity score went *down*, from 0.516 to 0.494, while results got much
+   better.** Absolute cosine values do not mean what intuition suggests — only ranking is
+   trustworthy. Any design that thresholds on an absolute score is built on sand.
+
+This is also why the boilerplate detector in `02_enrich.sql` matters more than it first
+appears. It looked like a style check. It was measuring the thing that was breaking
+retrieval.
+
 ### The risk this creates: hallucination at index time
 
 Enrichment has a failure mode that plain RAG does not, and it is worth stating up front.
