@@ -18,7 +18,12 @@ The key idea: instead of embedding raw ingredient lists (which never match senso
 LLM first rewrites every recipe into a **sensory flavor profile**, and *that* is what gets
 indexed. See [DESIGN.md](DESIGN.md) for the full rationale.
 
-**Stack:** dlt · Snowflake (VECTOR, Cortex `AI_EMBED` + `COMPLETE`, Cortex Search) · Streamlit
+**Stack:** dlt · Snowflake (VECTOR, Cortex `AI_EMBED` + `AI_COMPLETE`) · Streamlit
+
+> Cortex Search (hybrid keyword+vector retrieval with reranking and attribute filters) is
+> **not yet implemented** — it is the Phase 5 arm C comparison. The current pipeline is pure
+> `VECTOR_COSINE_SIMILARITY`, as the architecture below shows.
+
 **No external API keys. No separate vector database.**
 
 ---
@@ -30,14 +35,14 @@ HuggingFace kaggle_food_recipes (13,501 recipes)
         │  dlt — schema inference, merge by recipe_id
         ▼
    RAW.RECIPES
-        │  CORTEX.COMPLETE — generate sensory flavor profile
+        │  AI_COMPLETE — generate sensory flavor profile
         ▼
    ENRICHED.RECIPE_PROFILES
         │  AI_EMBED — multilingual embeddings
         ▼
    SEARCH.RECIPE_VECTORS  (VECTOR(FLOAT, 1024))
         │  VECTOR_COSINE_SIMILARITY — Top-K retrieval
-        │  CORTEX.COMPLETE — grounded explanation
+        │  AI_COMPLETE — grounded explanation
         ▼
    Streamlit UI
 ```

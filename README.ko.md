@@ -18,7 +18,12 @@ Snowflake 안에서 전부 돌아가는 RAG(검색 증강 생성) 파이프라�
 LLM이 먼저 각 레시피를 **감각 묘사(flavor profile)** 로 다시 쓰고 **그걸** 인덱싱합니다.
 자세한 근거는 [DESIGN.ko.md](DESIGN.ko.md) 참고.
 
-**스택:** dlt · Snowflake (VECTOR, Cortex `AI_EMBED` + `COMPLETE`, Cortex Search) · Streamlit
+**스택:** dlt · Snowflake (VECTOR, Cortex `AI_EMBED` + `AI_COMPLETE`) · Streamlit
+
+> Cortex Search(키워드+벡터 하이브리드 + 재순위 + 속성 필터)는 **아직 미구현**이며
+> Phase 5의 arm C 비교 대상입니다. 현재 파이프라인은 아래 아키텍처대로 순수
+> `VECTOR_COSINE_SIMILARITY` 입니다.
+
 **외부 API 키 0개. 별도 벡터 DB 0개.**
 
 ---
@@ -30,14 +35,14 @@ HuggingFace kaggle_food_recipes (레시피 13,501개)
         │  dlt — 스키마 추론, uid 기준 merge
         ▼
    RAW.RECIPES
-        │  CORTEX.COMPLETE — 감각 묘사 생성
+        │  AI_COMPLETE — 감각 묘사 생성
         ▼
    ENRICHED.RECIPE_PROFILES
         │  AI_EMBED — 다국어 임베딩
         ▼
    SEARCH.RECIPE_VECTORS  (VECTOR(FLOAT, 1024))
         │  VECTOR_COSINE_SIMILARITY — Top-K 검색
-        │  CORTEX.COMPLETE — 근거 기반 설명 생성
+        │  AI_COMPLETE — 근거 기반 설명 생성
         ▼
    Streamlit UI
 ```
