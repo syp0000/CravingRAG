@@ -121,10 +121,10 @@ cp .dlt/example.secrets.toml .dlt/secrets.toml
 
 ## 진행 상황
 
-- [ ] Phase 1 — dlt 적재
-- [ ] Phase 2 — LLM 문서 강화
-- [ ] Phase 3 — 벡터 검색
-- [ ] Phase 4 — 근거 기반 생성 + Streamlit UI
+- [x] Phase 1 — dlt 적재
+- [x] Phase 2 — LLM 문서 강화
+- [x] Phase 3 — 벡터 검색
+- [~] Phase 4 — 근거 기반 생성 ✅, Streamlit UI 남음
 - [ ] Phase 5 — ⭐ 평가: 3-arm Recall@5 벤치마크 (`eval/queries.yml`)
 - [ ] Phase 6 — 제약 검색: 팬트리 필터, pre-filter vs post-filter
 - [ ] Phase 7 — 영수증 사진 → 팬트리 (멀티모달, 선택)

@@ -120,10 +120,10 @@ Run the phases in order. Each one is independently verifiable.
 
 ## Project status
 
-- [ ] Phase 1 — dlt ingestion
-- [ ] Phase 2 — LLM document enrichment
-- [ ] Phase 3 — vector retrieval
-- [ ] Phase 4 — grounded generation + Streamlit UI
+- [x] Phase 1 — dlt ingestion
+- [x] Phase 2 — LLM document enrichment
+- [x] Phase 3 — vector retrieval
+- [~] Phase 4 — grounded generation ✅, Streamlit UI pending
 - [ ] Phase 5 — ⭐ evaluation: 3-arm Recall@5 benchmark (`eval/queries.yml`)
 - [ ] Phase 6 — constrained retrieval: pantry filter, pre-filter vs post-filter
 - [ ] Phase 7 — receipt photo → pantry (multimodal, optional)
