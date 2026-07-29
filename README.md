@@ -125,6 +125,9 @@ Run the phases in order. Each one is independently verifiable.
 
 ## Project status
 
+> **V2 rebuild in progress** — see [PLAN.md](PLAN.md). The checklist below is the v1 plan,
+> kept for the record; Phases 6–8 are dropped in v2.
+
 - [x] Phase 1 — dlt ingestion
 - [x] Phase 2 — LLM document enrichment
 - [x] Phase 3 — vector retrieval

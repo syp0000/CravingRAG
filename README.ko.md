@@ -126,6 +126,9 @@ cp .dlt/example.secrets.toml .dlt/secrets.toml
 
 ## 진행 상황
 
+> **V2 재구축 진행 중** — [PLAN.md](PLAN.md) 참고. 아래 체크리스트는 v1 계획이며 기록용으로 유지.
+> Phase 6–8은 v2에서 제외됨.
+
 - [x] Phase 1 — dlt 적재
 - [x] Phase 2 — LLM 문서 강화
 - [x] Phase 3 — 벡터 검색
