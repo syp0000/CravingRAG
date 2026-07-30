@@ -22,7 +22,15 @@ deliverable that works on its own, so a skipped weekend never leaves the project
 The baseline must be measured on the **new curated corpus** with the **old method**,
 before anything is rebuilt. Without it, "v2 improved X → Y" cannot be said.
 
-- [ ] Download RecipeNLG, spot-check the gap dishes: `grep -ci "tteokbokki\|pho\|bulgogi\|birria\|al pastor\|pad thai"` — this decides the source. Fail → fallback path.
+- [x] ~~Download RecipeNLG, spot-check the gap dishes~~ **PASSED (2026-07-29).** All gap
+      dishes present with real ingredients + directions (tteokbokki 19, bulgogi 247,
+      birria 20, pad thai 574). Verified rows are genuine (Gungjung Tteokbokki via
+      allrecipes). **RecipeNLG is the single source; fallback path retired.**
+      - Bonus: the `NER` column carries pre-extracted ingredient names — use it for the
+        exclusion/allergen filter instead of parsing quantity strings.
+      - ⚠️ License is **non-commercial research/educational only**: fine for this project,
+        but never commit the CSV or any extract to the repo (`data/` is gitignored — keep
+        it there), and credit RecipeNLG (Poznań University of Technology) in the README.
 - [ ] Write `data/curation_list.csv` (`pattern,cuisine`) — the dish list IS the cuisine column, no classifier.
 - [ ] Filter locally with pandas; load **only** the curated rows (never all 2.2M).
 - [ ] Run the v1 pipeline (terse enrichment → embed) over the curated corpus.
