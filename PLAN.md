@@ -40,6 +40,10 @@ before anything is rebuilt. Without it, "v2 improved X → Y" cannot be said.
 
 ## Weekend 2 — Sensory layer + structured profiles
 
+> Data model is settled — see [DECISIONS.md](DECISIONS.md) for the three tables and the
+> reasoning behind each choice (sensory-distinct rows, primitives-only storage, NULL vs 0,
+> fail open/closed).
+
 - [ ] Sensory concept docs, 15–30 only (scoped to the eval queries, not "all food language"). Each: concept, related phrasings, attributes it implies, conflicting attributes. **Hand-verified — LLM drafts, human approves each one** (jjinppang-"earthy" lesson).
 - [ ] Structured recipe profiles via `AI_COMPLETE` with `response_format` (JSON schema): attributes + `evidence` + `confidence`. Evidence-free attributes get dropped or low confidence — this is the scalable hallucination detector v1 lacked.
 - [ ] Query parser: craving → structured intent JSON (desired / excluded attributes).
