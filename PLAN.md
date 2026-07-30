@@ -1,84 +1,183 @@
-# V2 Plan — rebuild around a sensory knowledge layer
+# V2 Plan
 
-Working agreement: Siyeon writes the code. Weekends only. Each weekend ends with a
-deliverable that works on its own, so a skipped weekend never leaves the project broken.
+Data model and the reasoning behind it: [DECISIONS.md](DECISIONS.md).
+V1 findings that motivated the rebuild: [DESIGN.md](DESIGN.md) §7.
 
-## Scope decisions (settled, with why)
+Working agreement: Siyeon writes the code. Weekends only. Every task states **what must be
+true when it's done**, so a session can end mid-weekend without losing the thread.
+
+---
+
+## Architecture
+
+Two halves. Everything expensive runs offline; a query only reads.
+
+```
+OFFLINE — build the corpus (re-runs only when data or prompts change)
+
+  RecipeNLG 2.23M rows (local CSV, never committed)
+        │  W1.1  curation_list.csv          hand-written: pattern → cuisine
+        ▼
+  pandas filter                              2.23M → ~400 rows
+        │  W1.3  dlt
+        ▼
+  RAW.CURATED_RECIPES                        title, ingredients, directions, NER, cuisine
+        │  W2.1  split variants by ingredients
+        ▼
+  DISHES                                     one row per sensory-distinct dish
+        │  W2.2  AI_COMPLETE + JSON schema
+        ▼
+  DISH_PRIMITIVES  (dish_id, axis)           value + evidence + confidence, long format
+                                             NULL when evidence is empty
+
+  CRAVINGS   craving → primitives            W2.3  ~30 rows, hand-verified
+             + AI_EMBED vector               lets unseen phrasings find a nearest entry
+
+
+ONLINE — answer one craving (all reads)
+
+  "매콤하고 뜨끈한 국물"
+        │  parse: look up CRAVINGS — exact, else nearest by embedding
+        ▼
+  intent: (axis, target) pairs               ('spicy', 0.8), ('temperature', 1.0)
+        │  exclusion axes applied FIRST as a hard filter — fail closed
+        ▼
+  candidate dishes
+        │  JOIN DISH_PRIMITIVES USING (axis), AVG(axis_score)    fail open on NULL
+        ▼
+  ranked dishes  +  the matched rows         ← these rows ARE the graph edges
+        │
+        ├─→ AI_COMPLETE: explanation grounded in the evidence fields
+        └─→ UI: renders paths from the matched rows, invents nothing
+
+  fallback: nothing in CRAVINGS matched well enough → plain vector search (v1 behaviour).
+            Imperfect beats empty.
+```
+
+---
+
+## Scope decisions (settled)
 
 | Decision | Why |
 |---|---|
-| **English only** | Cross-lingual stays a *v1 finding* (measured 0.09 handicap) — cite it, don't carry it. Target audience is US-based. |
-| **Curated corpus, ~300–500 dishes** | American mainstream + Tex-Mex + popular Asian (curry, pho, tteokbokki) + Mediterranean-lite. Small enough to judge honestly — the judge must know the dishes. |
-| **Single source: RecipeNLG** (pending spot-check) | Unified schema with ingredients + directions kills the thin-source hallucination problem structurally. Fallback if spot-check fails: filter existing Epicurious + hand-write ~50 gap dishes as CSV. |
-| **Same embedding model as v1** (`arctic-embed-l-v2.0`) | Change the architecture OR the model, never both — otherwise the improvement can't be attributed. |
-| **Graph = query expansion + explanation, never retrieval itself** | Pure graph traversal reintroduces lexical matching: a query concept missing from the graph would return *nothing* (the "squirts" failure, made total). Embeddings stay as fallback. |
-| **Cortex Search attribute filters + numeric boosts, no hand-tuned weighted sum** | The platform already does hybrid + rerank; a custom `0.4×a + 0.25×b` is indefensible ("why 0.4?"). |
-| **Exclusion filter = string match + 3–5 hand aliases** | `NOT ILIKE '%almond%'` + marzipan/frangipane/amaretto. No allergen ontology. Labelled a *preference filter, not medical advice*; hidden-allergen misses are a documented limitation. |
-| **Keep all v1 tables** (`SEARCH.RECIPE_VECTORS` etc.) | Only way to re-derive the baseline. |
-| **Phases 6–8 of the old plan: dropped** | Pantry, receipts, live API — none of it improves retrieval quality. |
+| **English only** | Cross-lingual stays a cited *v1 finding* (measured 0.09 handicap), not a feature to carry. Audience is US-based. |
+| **~300–500 curated dishes** | Small enough that the judge knows the dishes — v1 judging stalled on Sapu Mhicha. |
+| **RecipeNLG as the single source** ✅ | Spot-check passed 2026-07-29: tteokbokki 19, bulgogi 247, birria 20, pad thai 574, all with real ingredients + directions. `NER` column ships normalized ingredient names — use it for the exclusion filter. **License is non-commercial research/educational: never commit the CSV or any extract (`data/` is gitignored), and credit RecipeNLG (Poznań University of Technology) in the README.** |
+| **Same embedding model as v1** (`arctic-embed-l-v2.0`) | Change the architecture OR the model, never both, or the improvement can't be attributed. |
+| **Graph does expansion + explanation, never retrieval** | Pure traversal returns *nothing* for a concept missing from the graph — the "squirts" failure made total. Embeddings stay as the floor. |
+| **Cortex Search filters + boosts, no hand-tuned weights** | The platform already does hybrid + rerank. A custom `0.4×a + 0.25×b` is indefensible in an interview. |
+| **Exclusion = string match on `NER` + a few hand aliases** | marzipan / frangipane / amaretto. No allergen ontology. Labelled *a preference filter, not medical advice*. |
+| **Keep all v1 tables** | The only way to re-derive a baseline. |
+| **Old Phases 6–8 dropped** | Pantry, receipts, live API — none improve retrieval quality. |
 
-## Weekend 1 — Corpus + baseline number
+---
 
-The baseline must be measured on the **new curated corpus** with the **old method**,
-before anything is rebuilt. Without it, "v2 improved X → Y" cannot be said.
+## Weekend 1 — Baseline
 
-- [x] ~~Download RecipeNLG, spot-check the gap dishes~~ **PASSED (2026-07-29).** All gap
-      dishes present with real ingredients + directions (tteokbokki 19, bulgogi 247,
-      birria 20, pad thai 574). Verified rows are genuine (Gungjung Tteokbokki via
-      allrecipes). **RecipeNLG is the single source; fallback path retired.**
-      - Bonus: the `NER` column carries pre-extracted ingredient names — use it for the
-        exclusion/allergen filter instead of parsing quantity strings.
-      - ⚠️ License is **non-commercial research/educational only**: fine for this project,
-        but never commit the CSV or any extract to the repo (`data/` is gitignored — keep
-        it there), and credit RecipeNLG (Poznań University of Technology) in the README.
-- [ ] Write `data/curation_list.csv` (`pattern,cuisine`) — the dish list IS the cuisine column, no classifier.
-- [ ] Filter locally with pandas; load **only** the curated rows (never all 2.2M).
-- [ ] Run the v1 pipeline (terse enrichment → embed) over the curated corpus.
-- [ ] Write 15 English eval queries (sensory / occasion / constraint-incl-exclusion); judge top-K pool **0–3 graded** per `eval/JUDGING.md`; compute NDCG@5 + Recall@5.
+⚠️ **This weekend runs the V1 pipeline, not the new data model.** The point is a number to
+beat. Building `DISH_PRIMITIVES` now would leave nothing to compare against.
 
-**Deliverable: the baseline number.**
+### W1.1 — `data/curation_list.csv`
+Hand-write the dish list. It doubles as the cuisine column, so no classifier is needed.
 
-## Weekend 2 — Sensory layer + structured profiles
+```csv
+pattern,cuisine
+tteokbokki,korean
+bulgogi,korean
+pho,vietnamese
+birria,mexican
+mac and cheese,american
+```
 
-> Data model is settled — see [DECISIONS.md](DECISIONS.md) for the three tables and the
-> reasoning behind each choice (sensory-distinct rows, primitives-only storage, NULL vs 0,
-> fail open/closed).
+~60–100 patterns across: American mainstream · Tex-Mex · popular East/SE Asian ·
+Mediterranean-lite.
+**Done when:** the file exists with every category represented. Not "complete" — it will grow.
 
-- [ ] Sensory concept docs, 15–30 only (scoped to the eval queries, not "all food language"). Each: concept, related phrasings, attributes it implies, conflicting attributes. **Hand-verified — LLM drafts, human approves each one** (jjinppang-"earthy" lesson).
-- [ ] Structured recipe profiles via `AI_COMPLETE` with `response_format` (JSON schema): attributes + `evidence` + `confidence`. Evidence-free attributes get dropped or low confidence — this is the scalable hallucination detector v1 lacked.
-- [ ] Query parser: craving → structured intent JSON (desired / excluded attributes).
+### W1.2 — Filter script
+Local pandas: `RecipeNLG_dataset.csv` → `data/curated.csv`.
 
-**Deliverable: the two tables, spot-checked against dishes Siyeon actually knows.**
+- `chunksize=100_000` — do not load 2.2GB at once.
+- Match on `title`, case-insensitive.
+- **Word boundaries on short patterns** — bare `pho` matches *phosphate*.
+- Cap per pattern (1–3 recipes each) or one dish drowns the corpus.
 
-## Weekend 3 — Retrieval + the comparison number
+**Done when:** `data/curated.csv` has 300–500 rows and `grep -ci` finds tteokbokki, pho and
+birria inside it.
 
-- [ ] Cortex Search service over profile text, with attribute columns for filtering.
-- [ ] Exclusion filtering (allergens/dietary) as hard SQL filters, aliases from the sensory layer.
-- [ ] Each stage emits JSON (intent → expanded concepts → candidates → final + paths). **This is the UI's data feed — no frontend-invented edges.**
-- [ ] Re-judge the same 15 queries, same rules → NDCG@5 vs baseline, per category.
+### W1.3 — Load to Snowflake
+New dlt resource, same shape as `pipelines/load_recipes.py`. Target `RAW.CURATED_RECIPES`.
 
-**Deliverable: "baseline X → v2 Y", with the exclusion category expected to show the
-biggest gain (it's the measured v1 negation failure, fixed by construction).**
+**Done when:** `SELECT COUNT(*)` in Snowflake equals the CSV row count.
+
+### W1.4 — Enrich + embed, V1 method
+Reuse `sql/02_enrich.sql` (terse noun-dense prompt) and `sql/03_embed.sql` against the new
+table. **Change the source table only — do not improve the prompt.** This is the control arm.
+
+**Done when:** the vectors table row count matches, and 5 spot-checked profiles read like
+`"Tteokbokki. Spicy rice cake dish. Savory, fiery, sweet. Chewy, soft. Gochujang, rice cakes."`
+
+### W1.5 — 15 English eval queries
+Rewrite `eval/queries.yml`: sensory · occasion · constraint · **exclusion** (`"no almonds"`,
+`"vegetarian"`). Exclusion is where V2 wins by construction, so the baseline has to measure it
+failing.
+
+**Done when:** 15 queries exist, every category represented.
+
+### W1.6 — Judge, graded 0–3
+Build the pool (`sql/05_eval.sql` steps ③④), export, judge per [eval/JUDGING.md](eval/JUDGING.md).
+Grade 0–3, not binary — NDCG needs it, and it collapses to binary for free.
+
+**Done when:** `EVAL.JUDGMENTS` is loaded and ~50–70% of rows are non-zero. Much higher means
+the bar is too low to separate systems.
+
+### W1.7 — Compute the number
+NDCG@5 and Recall@5, overall and per category → `eval/results_baseline.md`.
+
+**Done when:** the numbers exist and the per-category **exclusion** score is recorded. That is
+the one V2 must move.
+
+**→ Deliverable: the baseline.**
+
+---
+
+## Weekend 2 — Sensory layer + primitives
+
+- **W2.1** Split variants: group `RAW.CURATED_RECIPES` by pattern, compare ingredients, emit
+  `DISHES`. *Done when:* tteokbokki appears as separate spicy / soy / cream rows.
+- **W2.2** `DISH_PRIMITIVES` via `AI_COMPLETE` + `response_format`. Evidence-free axes → NULL.
+  *Done when:* `SELECT COUNT(*) WHERE value IS NOT NULL AND evidence = []` returns **0**.
+- **W2.3** `CRAVINGS`: ~30 hand-verified entries + `AI_EMBED` vectors.
+  *Done when:* `"squirts liquid"` resolves to the `juicy` entry by nearest neighbour.
+
+## Weekend 3 — Retrieval + comparison
+
+- **W3.1** Exclusion filter on `NER`, fail closed. *Done when:* `"no almonds"` returns zero
+  dishes containing almond **and** zero dishes whose almond status is unknown.
+- **W3.2** Scoring query (the `JOIN ... USING (axis)` shape in DECISIONS §8), emitting matched
+  rows as JSON. *Done when:* one query returns ranked dishes **and** their edges.
+- **W3.3** Re-judge the **same 15 queries, same rules**. *Done when:* `eval/results_v2.md`
+  sits beside the baseline and exclusion has moved.
 
 ## Weekend 4 — UI + writeup
 
-- [ ] Graph UI, **static first**: query → lit concepts → candidate paths → final recipes, rendered from the stage JSON. Animation only if time remains (agentic coding is fine here).
-- [ ] README results section: baseline-vs-v2 table, per-category breakdown, 3–5 failure cases with diagnosis, credits spent.
-- [ ] Replace the informal "3/10 → 9/10" in the resume line with the measured numbers.
+- **W4.1** Graph UI, **static first**, rendered from W3.2's JSON. Animation only if time is left.
+- **W4.2** README results: baseline vs V2 table, per-category breakdown, 3–5 failure cases with
+  diagnosis, credits spent. Replace the informal "3/10 → 9/10" in the resume line with the
+  measured numbers.
 
-**Deliverable: demo + writeup. This is the portfolio artifact.**
+---
 
 ## Success criteria
 
-- Exclusion queries: v2 must beat baseline (this is the designed-in win — if it doesn't, something is wired wrong).
-- Multi-constraint sensory queries ("refreshing + juicy + not too sweet"): improvement expected via expansion; report honestly if absent.
-- Every number in the README traceable to a query that can be re-run.
+- **Exclusion queries must beat baseline.** Designed-in; if it doesn't move, something is miswired.
+- Multi-constraint sensory queries improve via craving expansion — report honestly if not.
+- Every number in the README traceable to a re-runnable query.
 
-## Known risks
+## Risks
 
 | Risk | Mitigation |
 |---|---|
-| RecipeNLG lacks the Asian dishes | Fallback path is already defined; decide in the first hour of Weekend 1 |
-| Sensory layer bloat | Hard cap 30 concepts; scoped to eval queries |
-| UI eats the schedule | Static graph is the Weekend 4 deliverable; animation is stretch |
-| Judging drift between baseline and v2 | Same 15 queries, same `JUDGING.md` rules, judged in one sitting each time |
+| Weekend 1 drifts into building the new model | W1 is explicitly the V1 pipeline; new tables start W2. |
+| Sensory layer bloat | Hard cap 30 concepts, scoped to the 15 eval queries. |
+| UI eats the schedule | Static graph is the W4 deliverable; animation is stretch. |
+| Judging drift between baseline and V2 | Same queries, same `JUDGING.md`, each judged in one sitting. |
