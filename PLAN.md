@@ -1,183 +1,181 @@
 # V2 Plan
 
-Data model and the reasoning behind it: [DECISIONS.md](DECISIONS.md).
+**One line:** a Snowflake-native recipe search that turns craving language into dish matches,
+then shows *why* each dish matched as a constellation graph.
+
 V1 findings that motivated the rebuild: [DESIGN.md](DESIGN.md) §7.
+Judging rules (unchanged between V1 and V2): [eval/JUDGING.md](eval/JUDGING.md).
 
 Working agreement: Siyeon writes the code. Weekends only. Every task states **what must be
-true when it's done**, so a session can end mid-weekend without losing the thread.
+true when it's done**, so a session can stop anywhere without losing the thread.
+
+---
+
+## The two systems
+
+Keeping these straight is most of the project.
+
+|  | V1 — baseline | V2 — proposed |
+|---|---|---|
+| Recipe becomes | one sensory **text** profile | structured **sensory signals** + evidence |
+| Query becomes | an embedding | structured intent + exclusions |
+| Retrieval | vector similarity only | hard exclusion filter → attribute scoring |
+| Exclusions | none (they silently fail) | ingredient match, fail closed |
+| Fallback | — | vector search when nothing parses |
+
+**The graph is the visualization layer, not the retrieval engine.** It renders what the
+scoring already computed. A retrieval path that depended on the graph would return nothing
+for any concept missing from it — v1's "squirts" failure, made total.
 
 ---
 
 ## Architecture
 
-Two halves. Everything expensive runs offline; a query only reads.
-
 ```
 OFFLINE — build the corpus (re-runs only when data or prompts change)
 
   RecipeNLG 2.23M rows (local CSV, never committed)
-        │  W1.1  curation_list.csv          hand-written: pattern → cuisine
+        │  W1.1  data/curation_list.csv     114 patterns → cuisine  ✅ done
         ▼
-  pandas filter                              2.23M → ~400 rows
+  pandas filter, 1–3 recipes per pattern    2.23M → ~300–400 rows
         │  W1.3  dlt
         ▼
-  RAW.CURATED_RECIPES                        title, ingredients, directions, NER, cuisine
-        │  W2.1  split variants by ingredients
-        ▼
-  DISHES                                     one row per sensory-distinct dish
-        │  W2.2  AI_COMPLETE + JSON schema
-        ▼
-  DISH_PRIMITIVES  (dish_id, axis)           value + evidence + confidence, long format
-                                             NULL when evidence is empty
-
-  CRAVINGS   craving → primitives            W2.3  ~30 rows, hand-verified
-             + AI_EMBED vector               lets unseen phrasings find a nearest entry
-
-
-ONLINE — answer one craving (all reads)
-
-  "매콤하고 뜨끈한 국물"
-        │  parse: look up CRAVINGS — exact, else nearest by embedding
-        ▼
-  intent: (axis, target) pairs               ('spicy', 0.8), ('temperature', 1.0)
-        │  exclusion axes applied FIRST as a hard filter — fail closed
-        ▼
-  candidate dishes
-        │  JOIN DISH_PRIMITIVES USING (axis), AVG(axis_score)    fail open on NULL
-        ▼
-  ranked dishes  +  the matched rows         ← these rows ARE the graph edges
+  RAW.CURATED_RECIPES     recipe_id, title, ingredients, directions, ner, cuisine, pattern
         │
-        ├─→ AI_COMPLETE: explanation grounded in the evidence fields
-        └─→ UI: renders paths from the matched rows, invents nothing
+        ├─ W1.4  AI_COMPLETE → short sensory text  ─→  V1.RECIPE_PROFILES  (+ AI_EMBED)
+        │                                                    ↑ the baseline
+        │
+        └─ W2.1  AI_COMPLETE + JSON schema         ─→  V2.RECIPE_SIGNALS
+                                                        signals VARIANT   (axis → 0..1)
+                                                        evidence VARIANT  (axis → ingredients)
+                                                        axis is NULL when evidence is empty
 
-  fallback: nothing in CRAVINGS matched well enough → plain vector search (v1 behaviour).
-            Imperfect beats empty.
+  V2.EXCLUSION_ALIASES    canonical → alias        W3.1  peanut → peanuts, peanut butter
+
+
+ONLINE — answer one craving
+
+  V1:  query ─ AI_EMBED ─→ cosine over V1.RECIPE_PROFILES ─→ top 5
+
+  V2:  "spicy warm soup, no peanuts"
+         │  AI_COMPLETE → {"wanted": {"spicy":1.0,"warm":1.0,"brothy":0.8},
+         │                 "exclude": ["peanut"]}
+         ▼
+       hard exclusion on NER (fail closed — unknown counts as excluded)
+         ▼
+       score surviving recipes: AVG over the wanted axes, skipping NULLs (fail open)
+         ▼
+       top 5 + the matched (axis, value, evidence) rows   ← these ARE the graph edges
+         │
+         ├─→ AI_COMPLETE: explanation grounded in evidence
+         └─→ UI JSON: center node, dimension nodes, dish nodes
+         
+       fallback: nothing parsed → V1 vector search. Imperfect beats empty.
 ```
+
+**Why `signals` is one `VARIANT` column, not one column per axis:** `AI_COMPLETE` already
+returns JSON, so it goes in as-is — no parsing, no flattening. Adding an axis later is not a
+migration. Query with `signals:spicy::float`.
 
 ---
 
-## Scope decisions (settled)
+## Scope
 
-| Decision | Why |
+### Keep
+English only · RecipeNLG curated subset · same embedding model as V1
+(`arctic-embed-l-v2.0`) · Snowflake AI functions · ingredient exclusion · attribute scoring ·
+constellation UI · **baseline-vs-V2 measurement**
+
+### Dropped, and why
+
+| Dropped | Why |
 |---|---|
-| **English only** | Cross-lingual stays a cited *v1 finding* (measured 0.09 handicap), not a feature to carry. Audience is US-based. |
-| **~300–500 curated dishes** | Small enough that the judge knows the dishes — v1 judging stalled on Sapu Mhicha. |
-| **RecipeNLG as the single source** ✅ | Spot-check passed 2026-07-29: tteokbokki 19, bulgogi 247, birria 20, pad thai 574, all with real ingredients + directions. `NER` column ships normalized ingredient names — use it for the exclusion filter. **License is non-commercial research/educational: never commit the CSV or any extract (`data/` is gitignored), and credit RecipeNLG (Poznań University of Technology) in the README.** |
-| **Same embedding model as v1** (`arctic-embed-l-v2.0`) | Change the architecture OR the model, never both, or the improvement can't be attributed. |
-| **Graph does expansion + explanation, never retrieval** | Pure traversal returns *nothing* for a concept missing from the graph — the "squirts" failure made total. Embeddings stay as the floor. |
-| **Cortex Search filters + boosts, no hand-tuned weights** | The platform already does hybrid + rerank. A custom `0.4×a + 0.25×b` is indefensible in an interview. |
-| **Exclusion = string match on `NER` + a few hand aliases** | marzipan / frangipane / amaretto. No allergen ontology. Labelled *a preference filter, not medical advice*. |
-| **Keep all v1 tables** | The only way to re-derive a baseline. |
-| **Old Phases 6–8 dropped** | Pantry, receipts, live API — none improve retrieval quality. |
+| Hand-authored craving dictionary (~30 entries + embeddings) | `AI_COMPLETE` parsing handles arbitrary phrasing already. The dictionary solved a problem the parser doesn't have. |
+| Dish-variant auto-splitting | Only a problem if recipes are merged by name. Keeping a row = a recipe, capped 1–3 per pattern, dissolves it — gungjung and gochugaru tteokbokki simply stay separate rows with their own signals. |
+| `vegetarian` as an exclusion | Needs to know beef broth, gelatin, fish sauce aren't vegetarian. `almond`/`peanut` are string matches; this isn't. Clear line, stay on the easy side. |
+| Cortex Search custom boosting | Not needed for scoring over ~400 rows. |
+| Multilingual | Cross-lingual stays a cited v1 finding (measured 0.09 handicap), not a feature. |
+| Complex reranking weights | `AVG` first. A hand-tuned `0.4×a + 0.25×b` is indefensible in an interview. |
+
+### Constraints that must not be lost
+- **RecipeNLG license is non-commercial research/educational.** Never commit the CSV or any
+  extract (`data/*` is gitignored; `curation_list.csv` is the hand-authored exception).
+  Credit Poznań University of Technology in the README.
+- **Same embedding model in V1 and V2.** Change the architecture or the model, never both.
+- **Exclusion is labelled a preference filter, not medical advice.** Fail-closed can't catch
+  an allergen the ingredient list never names (marzipan, frangipane, amaretto).
 
 ---
 
 ## Weekend 1 — Baseline
 
-⚠️ **This weekend runs the V1 pipeline, not the new data model.** The point is a number to
-beat. Building `DISH_PRIMITIVES` now would leave nothing to compare against.
+⚠️ **This weekend builds V1 only.** The point is a number to beat. Any V2 work here leaves
+nothing to compare against.
 
-### W1.1 — `data/curation_list.csv`
-Hand-write the dish list. It doubles as the cuisine column, so no classifier is needed.
+⚠️ **Do not improve the V1 prompt.** Reuse `sql/02_enrich.sql`'s terse noun-dense prompt
+unchanged. It is the control arm. Ideas for improvement go in a notes file and get used in W2.
 
-```csv
-pattern,cuisine
-tteokbokki,korean
-bulgogi,korean
-pho,vietnamese
-birria,mexican
-mac and cheese,american
-```
+| # | Task | Done when |
+|---|---|---|
+| **W1.1** ✅ | `data/curation_list.csv` — 114 patterns | committed; every pattern matches ≥3 RecipeNLG titles |
+| **W1.2** | pandas filter → `data/curated.csv`. `chunksize=100_000`; word boundaries (`pho` matches *phosphate*); cap 1–3 recipes per pattern | 300–400 rows, and `grep -ci` finds tteokbokki, pho, birria, marzipan |
+| **W1.3** | dlt → `RAW.CURATED_RECIPES` | `SELECT COUNT(*)` equals the CSV row count |
+| **W1.4** | V1 profiles + embeddings → `V1.RECIPE_PROFILES` | row count matches; 5 spot-checked profiles read like `"Tteokbokki. Spicy rice cake dish. Savory, fiery, sweet. Chewy, soft. Gochujang, rice cakes."` |
+| **W1.5** | 12–15 English eval queries in `eval/queries.yml` | every category present, **including exclusion** (`"spicy dish without peanuts"`, `"comforting dish without almonds"`) |
+| **W1.6** | Build the pool (`sql/05_eval.sql` ③④), judge **graded 0–3** per `JUDGING.md` | `EVAL.JUDGMENTS` loaded, ~50–70% non-zero. Much higher = bar too low to separate systems |
+| **W1.7** | NDCG@5 + Recall@5, overall and per category → `eval/results_baseline.md` | numbers exist; **exclusion category recorded separately** — that's the one V2 must move |
 
-~60–100 patterns across: American mainstream · Tex-Mex · popular East/SE Asian ·
-Mediterranean-lite.
-**Done when:** the file exists with every category represented. Not "complete" — it will grow.
+Exclusion must be in the baseline *and expected to score badly*. V1 has no exclusion
+mechanism at all — "no peanuts" is the negation failure already measured in v1. That failing
+number is what makes V2's fix legible.
 
-### W1.2 — Filter script
-Local pandas: `RecipeNLG_dataset.csv` → `data/curated.csv`.
+**→ Deliverable: the baseline number.**
 
-- `chunksize=100_000` — do not load 2.2GB at once.
-- Match on `title`, case-insensitive.
-- **Word boundaries on short patterns** — bare `pho` matches *phosphate*.
-- Cap per pattern (1–3 recipes each) or one dish drowns the corpus.
+## Weekend 2 — Structured signals
 
-**Done when:** `data/curated.csv` has 300–500 rows and `grep -ci` finds tteokbokki, pho and
-birria inside it.
+Fix **6–8 axes** up front and don't grow them: `spicy, warm, brothy, savory, rich, fresh,
+sweet, comforting`.
 
-### W1.3 — Load to Snowflake
-New dlt resource, same shape as `pipelines/load_recipes.py`. Target `RAW.CURATED_RECIPES`.
+| # | Task | Done when |
+|---|---|---|
+| **W2.1** | `AI_COMPLETE` + `response_format` → `V2.RECIPE_SIGNALS` (`signals`, `evidence` VARIANT) | `SELECT COUNT(*) WHERE signals:spicy IS NOT NULL AND evidence:spicy IS NULL` returns **0** |
+| **W2.2** | Query parser prompt → `{"wanted": {...}, "exclude": [...]}` | `"spicy warm soup no peanuts"` parses correctly; so does a phrasing not seen before |
+| **W2.3** | Spot-check ~20 recipes against dishes you actually know | kimchi jjigae / pho / birria signals are defensible; anything wrong is an *enrichment* note, not a retrieval one |
 
-**Done when:** `SELECT COUNT(*)` in Snowflake equals the CSV row count.
+## Weekend 3 — V2 retrieval + the comparison
 
-### W1.4 — Enrich + embed, V1 method
-Reuse `sql/02_enrich.sql` (terse noun-dense prompt) and `sql/03_embed.sql` against the new
-table. **Change the source table only — do not improve the prompt.** This is the control arm.
+| # | Task | Done when |
+|---|---|---|
+| **W3.1** | `V2.EXCLUSION_ALIASES` + hard filter on `NER` | `"no peanuts"` removes every peanut dish **and** every dish whose peanut status is unknown |
+| **W3.2** | Scoring SQL — AVG over wanted axes, skip NULLs — emitting matched rows as JSON | one query returns ranked dishes **and** their `(axis, value, evidence)` rows |
+| **W3.3** | Re-judge the **same queries, same rules**, one sitting | `eval/results_v2.md` beside the baseline; exclusion has moved |
 
-**Done when:** the vectors table row count matches, and 5 spot-checked profiles read like
-`"Tteokbokki. Spicy rice cake dish. Savory, fiery, sweet. Chewy, soft. Gochujang, rice cakes."`
+## Weekend 4 — Constellation UI + writeup
 
-### W1.5 — 15 English eval queries
-Rewrite `eval/queries.yml`: sensory · occasion · constraint · **exclusion** (`"no almonds"`,
-`"vegetarian"`). Exclusion is where V2 wins by construction, so the baseline has to measure it
-failing.
-
-**Done when:** 15 queries exist, every category represented.
-
-### W1.6 — Judge, graded 0–3
-Build the pool (`sql/05_eval.sql` steps ③④), export, judge per [eval/JUDGING.md](eval/JUDGING.md).
-Grade 0–3, not binary — NDCG needs it, and it collapses to binary for free.
-
-**Done when:** `EVAL.JUDGMENTS` is loaded and ~50–70% of rows are non-zero. Much higher means
-the bar is too low to separate systems.
-
-### W1.7 — Compute the number
-NDCG@5 and Recall@5, overall and per category → `eval/results_baseline.md`.
-
-**Done when:** the numbers exist and the per-category **exclusion** score is recorded. That is
-the one V2 must move.
-
-**→ Deliverable: the baseline.**
-
----
-
-## Weekend 2 — Sensory layer + primitives
-
-- **W2.1** Split variants: group `RAW.CURATED_RECIPES` by pattern, compare ingredients, emit
-  `DISHES`. *Done when:* tteokbokki appears as separate spicy / soy / cream rows.
-- **W2.2** `DISH_PRIMITIVES` via `AI_COMPLETE` + `response_format`. Evidence-free axes → NULL.
-  *Done when:* `SELECT COUNT(*) WHERE value IS NOT NULL AND evidence = []` returns **0**.
-- **W2.3** `CRAVINGS`: ~30 hand-verified entries + `AI_EMBED` vectors.
-  *Done when:* `"squirts liquid"` resolves to the `juicy` entry by nearest neighbour.
-
-## Weekend 3 — Retrieval + comparison
-
-- **W3.1** Exclusion filter on `NER`, fail closed. *Done when:* `"no almonds"` returns zero
-  dishes containing almond **and** zero dishes whose almond status is unknown.
-- **W3.2** Scoring query (the `JOIN ... USING (axis)` shape in DECISIONS §8), emitting matched
-  rows as JSON. *Done when:* one query returns ranked dishes **and** their edges.
-- **W3.3** Re-judge the **same 15 queries, same rules**. *Done when:* `eval/results_v2.md`
-  sits beside the baseline and exclusion has moved.
-
-## Weekend 4 — UI + writeup
-
-- **W4.1** Graph UI, **static first**, rendered from W3.2's JSON. Animation only if time is left.
-- **W4.2** README results: baseline vs V2 table, per-category breakdown, 3–5 failure cases with
-  diagnosis, credits spent. Replace the informal "3/10 → 9/10" in the resume line with the
-  measured numbers.
+| # | Task | Done when |
+|---|---|---|
+| **W4.1** | UI from W3.2's JSON: center craving node → dimension nodes (colour per axis) → dish nodes (match %). **Static first.** | every edge traces to a backend row; nothing invented in the frontend |
+| **W4.2** | Animation — particle flow along edges, glow by match strength, hover shows evidence (`spicy → gochugaru`) | stretch goal; skip if W4.1 ran long |
+| **W4.3** | README results: baseline vs V2 table, per-category, 3–5 failure cases with diagnosis, credits spent | the informal "3/10 → 9/10" in the resume line replaced by measured numbers |
 
 ---
 
 ## Success criteria
 
 - **Exclusion queries must beat baseline.** Designed-in; if it doesn't move, something is miswired.
-- Multi-constraint sensory queries improve via craving expansion — report honestly if not.
+- Multi-constraint sensory queries improve via structured matching — report honestly if not.
 - Every number in the README traceable to a re-runnable query.
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| Weekend 1 drifts into building the new model | W1 is explicitly the V1 pipeline; new tables start W2. |
-| Sensory layer bloat | Hard cap 30 concepts, scoped to the 15 eval queries. |
-| UI eats the schedule | Static graph is the W4 deliverable; animation is stretch. |
-| Judging drift between baseline and V2 | Same queries, same `JUDGING.md`, each judged in one sitting. |
+| Weekend 1 drifts into V2 | W1 is V1-only, prompt frozen. V2 tables start W2. |
+| Axis creep | 6–8 fixed, decided W2.1, not revisited. |
+| UI eats the schedule | Static graph is the deliverable; animation is W4.2, droppable. |
+| Judging drift | Same queries, same `JUDGING.md`, each round judged in one sitting. |
+
+## Open
+
+- Whether `AVG` over wanted axes is enough, or axes the query stated explicitly need weight.
+- What to show when exclusion empties the result set — "no safe matches" beats a bad match.

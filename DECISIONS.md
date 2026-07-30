@@ -1,5 +1,19 @@
 # V2 Data Model — decisions and why
 
+> ⚠️ **Superseded in part.** §1, §2 and §7's `CRAVINGS` table were dropped after review —
+> see [PLAN.md](PLAN.md) "Dropped, and why". The reasoning below is kept because the
+> *problems* are real and will resurface; only the solutions changed:
+>
+> - **§1–2 (sensory-distinct dish rows, variant splitting)** — the hub problem is real, but
+>   it only exists when recipes are merged by dish name. Keeping a row = a recipe, capped
+>   1–3 per pattern, dissolves it without any variant-detection logic.
+> - **§4 (`CRAVINGS` dictionary + embedding fallback)** — `AI_COMPLETE` query parsing already
+>   handles arbitrary phrasing, so the dictionary solved a problem the parser doesn't have.
+>   The *principle* survives: graph provides precision, embeddings provide coverage.
+> - **§5–6 (NULL vs 0, fail open/closed)** — unchanged, and load-bearing.
+> - **§7–8 (long format)** — replaced by a single `VARIANT` column, which gets the same
+>   migration-free axis growth without the join gymnastics.
+
 Derived by working through the failure cases from v1. Each decision below was reached by
 testing a proposal against a concrete query and watching it break, so the reasoning is
 recorded alongside the choice — two months from now the *why* is the part that gets lost.
