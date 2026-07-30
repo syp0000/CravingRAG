@@ -5,5 +5,8 @@ __pycache__/
 .dlt/secrets.toml
 secrets.toml
 .streamlit/secrets.toml
-data/
+data/*
 *.duckdb
+
+# curation_list is hand-authored, not RecipeNLG data — safe to commit
+!data/curation_list.csv
