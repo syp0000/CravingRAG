@@ -18,7 +18,7 @@ Keeping these straight is most of the project.
 |  | V1 — baseline | V2 — proposed |
 |---|---|---|
 | Recipe becomes | one sensory **text** profile | structured **sensory signals** + evidence |
-| Query becomes | an embedding | structured intent + exclusions |
+| Query becomes | an embedding | concepts → axes via the **sensory wiki**, + exclusions |
 | Retrieval | vector similarity only | hard exclusion filter → attribute scoring |
 | Exclusions | none (they silently fail) | ingredient match, fail closed |
 | Fallback | — | vector search when nothing parses |
@@ -26,6 +26,35 @@ Keeping these straight is most of the project.
 **The graph is the visualization layer, not the retrieval engine.** It renders what the
 scoring already computed. A retrieval path that depended on the graph would return nothing
 for any concept missing from it — v1's "squirts" failure, made total.
+
+### The sensory wiki
+
+A ~25-row table mapping craving concepts to weighted axes:
+
+```csv
+concept,axis,weight
+refreshing,fresh,1.0
+refreshing,warm,0.0
+refreshing,rich,0.0
+comforting,warm,1.0
+comforting,rich,0.7
+comforting,savory,0.6
+hangover,warm,1.0
+hangover,brothy,1.0
+```
+
+Its point is **not** the extra graph hop, though that is where the constellation UI gets its
+depth. It is that without it, *nothing anywhere defines what "comforting" means*. The recipe
+side would have one LLM call decide kimchi jjigae scores 0.9 on comforting, and the query
+side a different call decide the user wants 1.0 — two independent interpretations of a word,
+agreeing only by coincidence of sharing a name.
+
+The wiki is that definition, in one file, hand-editable. When a result looks wrong, fix one
+row and re-query. Without it the fix is a prompt change and a re-run over all 400 recipes.
+
+Recipe-side axes stay exactly as they are — the wiki sits only on the query side. Decomposing
+recipe axes into lower-level primitives (`cold`, `acidic`, `moisture`) is a later option, not
+part of this build.
 
 ---
 
@@ -44,6 +73,7 @@ flowchart TD
     V1T[("V1.RECIPE_PROFILES<br/>sensory text + embedding")]
     V2T[("V2.RECIPE_SIGNALS<br/>signals VARIANT · evidence VARIANT")]
     ALIAS[("V2.EXCLUSION_ALIASES<br/>peanut → peanuts, peanut butter")]
+    WIKI[("V2.SENSORY_WIKI<br/>concept → axis, weight · ~25 rows")]
 
     CSV --> FILTER
     LIST --> FILTER
@@ -51,6 +81,7 @@ flowchart TD
     RAW -->|"W1.4 AI_COMPLETE + AI_EMBED"| V1T
     RAW -->|"W2.1 AI_COMPLETE + JSON schema"| V2T
     RAW -->|W3.1| ALIAS
+    WIKI -.hand-authored.-> V2T
 
     style V1T fill:#e8f4ff,stroke:#4a90d9
     style V2T fill:#fff4e8,stroke:#d9904a
@@ -68,7 +99,8 @@ flowchart TD
     Q -->|AI_EMBED| VEC["cosine over<br/>V1.RECIPE_PROFILES"]
     VEC --> T1["V1 · top 5"]
 
-    Q -->|AI_COMPLETE| INTENT["wanted: spicy 1.0, warm 1.0, brothy 0.8<br/>exclude: peanut"]
+    Q -->|AI_COMPLETE| CONC["concepts: spicy, warm, brothy<br/>exclude: peanut"]
+    CONC -->|SENSORY_WIKI lookup| INTENT["wanted: spicy 1.0, warm 1.0, brothy 0.8"]
     INTENT --> EXCL["hard exclusion on NER<br/><i>fail closed — unknown is excluded</i>"]
     EXCL --> SCORE["AVG over the wanted axes<br/><i>skip NULLs — fail open</i>"]
     SCORE --> T2["V2 · top 5<br/>+ matched (axis, value, evidence) rows"]
@@ -76,7 +108,7 @@ flowchart TD
     T2 --> EXPL["AI_COMPLETE<br/>explanation grounded in evidence"]
     T2 --> UI["UI JSON<br/>center · dimension · dish nodes"]
 
-    INTENT -.->|nothing parsed| VEC
+    CONC -.->|nothing parsed| VEC
 
     style T1 fill:#e8f4ff,stroke:#4a90d9
     style T2 fill:#fff4e8,stroke:#d9904a
@@ -104,7 +136,7 @@ constellation UI · **baseline-vs-V2 measurement**
 
 | Dropped | Why |
 |---|---|
-| Hand-authored craving dictionary (~30 entries + embeddings) | `AI_COMPLETE` parsing handles arbitrary phrasing already. The dictionary solved a problem the parser doesn't have. |
+| Craving dictionary *with embeddings + nearest-neighbour lookup* | The lookup machinery is gone — `AI_COMPLETE` maps a phrasing to a concept directly. The ~25-row concept→axis mapping stays, as `V2.SENSORY_WIKI`: it is what defines the terms. |
 | Dish-variant auto-splitting | Only a problem if recipes are merged by name. Keeping a row = a recipe, capped 1–3 per pattern, dissolves it — gungjung and gochugaru tteokbokki simply stay separate rows with their own signals. |
 | `vegetarian` as an exclusion | Needs to know beef broth, gelatin, fish sauce aren't vegetarian. `almond`/`peanut` are string matches; this isn't. Clear line, stay on the easy side. |
 | Cortex Search custom boosting | Not needed for scoring over ~400 rows. |
@@ -153,8 +185,9 @@ sweet, comforting`.
 | # | Task | Done when |
 |---|---|---|
 | **W2.1** | `AI_COMPLETE` + `response_format` → `V2.RECIPE_SIGNALS` (`signals`, `evidence` VARIANT) | `SELECT COUNT(*) WHERE signals:spicy IS NOT NULL AND evidence:spicy IS NULL` returns **0** |
-| **W2.2** | Query parser prompt → `{"wanted": {...}, "exclude": [...]}` | `"spicy warm soup no peanuts"` parses correctly; so does a phrasing not seen before |
-| **W2.3** | Spot-check ~20 recipes against dishes you actually know | kimchi jjigae / pho / birria signals are defensible; anything wrong is an *enrichment* note, not a retrieval one |
+| **W2.2** | `V2.SENSORY_WIKI` — ~25 rows, hand-authored, one row per (concept, axis) | every axis a concept references exists in the fixed 6–8; `refreshing` and `comforting` both resolve |
+| **W2.3** | Query parser prompt → `{"concepts": [...], "exclude": [...]}`, then wiki lookup → axis targets | `"spicy warm soup no peanuts"` parses; an unseen phrasing maps to a known concept rather than inventing an axis |
+| **W2.4** | Spot-check ~20 recipes against dishes you actually know | kimchi jjigae / pho / birria signals are defensible; anything wrong is an *enrichment* note, not a retrieval one |
 
 ## Weekend 3 — V2 retrieval + the comparison
 
@@ -185,11 +218,14 @@ sweet, comforting`.
 | Risk | Mitigation |
 |---|---|
 | Weekend 1 drifts into V2 | W1 is V1-only, prompt frozen. V2 tables start W2. |
-| Axis creep | 6–8 fixed, decided W2.1, not revisited. |
+| Axis creep | 6–8 fixed, decided W2.1, not revisited. The wiki grows instead — new craving concepts map onto existing axes. |
 | UI eats the schedule | Static graph is the deliverable; animation is W4.2, droppable. |
 | Judging drift | Same queries, same `JUDGING.md`, each round judged in one sitting. |
 
 ## Open
+
+- Whether the wiki should also carry *negative* weights (`refreshing → rich 0.0` is
+  currently "want low", not "penalise high") or whether AVG-toward-target covers it.
 
 - Whether `AVG` over wanted axes is enough, or axes the query stated explicitly need weight.
 - What to show when exclusion empties the result set — "no safe matches" beats a bad match.
