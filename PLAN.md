@@ -222,6 +222,14 @@ sweet, comforting`.
 | UI eats the schedule | Static graph is the deliverable; animation is W4.2, droppable. |
 | Judging drift | Same queries, same `JUDGING.md`, each round judged in one sitting. |
 
+## Weekend 5+ (stretch) — scale-up
+
+Only after the 400-row comparison is measured. Re-run the same pipeline at 30–50k rows and
+**measure what breaks**: duplicate flooding, hub re-emergence, NDCG drift, and credits per
+1k recipes. This is where "why Snowflake" stops being an argument and becomes a number.
+Full 2.23M is embedding-only territory — signals enrichment scales linearly (~2.7B tokens
+for the full set) and does not fit a trial.
+
 ## Open
 
 - Whether the wiki should also carry *negative* weights (`refreshing → rich 0.0` is
