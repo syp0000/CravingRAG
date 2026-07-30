@@ -31,47 +31,61 @@ for any concept missing from it — v1's "squirts" failure, made total.
 
 ## Architecture
 
+### Offline — build the corpus
+
+Re-runs only when the data or the prompts change.
+
+```mermaid
+flowchart TD
+    CSV["RecipeNLG · 2.23M rows<br/><i>local CSV, never committed</i>"]
+    LIST["W1.1 curation_list.csv<br/>114 patterns → cuisine"]
+    FILTER["W1.2 pandas filter<br/>1–3 recipes per pattern"]
+    RAW[("RAW.CURATED_RECIPES · ~300–400 rows<br/>recipe_id, title, ingredients,<br/>directions, ner, cuisine, pattern")]
+    V1T[("V1.RECIPE_PROFILES<br/>sensory text + embedding")]
+    V2T[("V2.RECIPE_SIGNALS<br/>signals VARIANT · evidence VARIANT")]
+    ALIAS[("V2.EXCLUSION_ALIASES<br/>peanut → peanuts, peanut butter")]
+
+    CSV --> FILTER
+    LIST --> FILTER
+    FILTER -->|W1.3 dlt| RAW
+    RAW -->|"W1.4 AI_COMPLETE + AI_EMBED"| V1T
+    RAW -->|"W2.1 AI_COMPLETE + JSON schema"| V2T
+    RAW -->|W3.1| ALIAS
+
+    style V1T fill:#e8f4ff,stroke:#4a90d9
+    style V2T fill:#fff4e8,stroke:#d9904a
 ```
-OFFLINE — build the corpus (re-runs only when data or prompts change)
 
-  RecipeNLG 2.23M rows (local CSV, never committed)
-        │  W1.1  data/curation_list.csv     114 patterns → cuisine  ✅ done
-        ▼
-  pandas filter, 1–3 recipes per pattern    2.23M → ~300–400 rows
-        │  W1.3  dlt
-        ▼
-  RAW.CURATED_RECIPES     recipe_id, title, ingredients, directions, ner, cuisine, pattern
-        │
-        ├─ W1.4  AI_COMPLETE → short sensory text  ─→  V1.RECIPE_PROFILES  (+ AI_EMBED)
-        │                                                    ↑ the baseline
-        │
-        └─ W2.1  AI_COMPLETE + JSON schema         ─→  V2.RECIPE_SIGNALS
-                                                        signals VARIANT   (axis → 0..1)
-                                                        evidence VARIANT  (axis → ingredients)
-                                                        axis is NULL when evidence is empty
+`V1.RECIPE_PROFILES` is the **baseline**. An axis in `V2.RECIPE_SIGNALS` is `NULL` whenever
+its evidence is empty.
 
-  V2.EXCLUSION_ALIASES    canonical → alias        W3.1  peanut → peanuts, peanut butter
+### Online — answer one craving
 
+```mermaid
+flowchart TD
+    Q["<b>spicy warm soup, no peanuts</b>"]
 
-ONLINE — answer one craving
+    Q -->|AI_EMBED| VEC["cosine over<br/>V1.RECIPE_PROFILES"]
+    VEC --> T1["V1 · top 5"]
 
-  V1:  query ─ AI_EMBED ─→ cosine over V1.RECIPE_PROFILES ─→ top 5
+    Q -->|AI_COMPLETE| INTENT["wanted: spicy 1.0, warm 1.0, brothy 0.8<br/>exclude: peanut"]
+    INTENT --> EXCL["hard exclusion on NER<br/><i>fail closed — unknown is excluded</i>"]
+    EXCL --> SCORE["AVG over the wanted axes<br/><i>skip NULLs — fail open</i>"]
+    SCORE --> T2["V2 · top 5<br/>+ matched (axis, value, evidence) rows"]
 
-  V2:  "spicy warm soup, no peanuts"
-         │  AI_COMPLETE → {"wanted": {"spicy":1.0,"warm":1.0,"brothy":0.8},
-         │                 "exclude": ["peanut"]}
-         ▼
-       hard exclusion on NER (fail closed — unknown counts as excluded)
-         ▼
-       score surviving recipes: AVG over the wanted axes, skipping NULLs (fail open)
-         ▼
-       top 5 + the matched (axis, value, evidence) rows   ← these ARE the graph edges
-         │
-         ├─→ AI_COMPLETE: explanation grounded in evidence
-         └─→ UI JSON: center node, dimension nodes, dish nodes
-         
-       fallback: nothing parsed → V1 vector search. Imperfect beats empty.
+    T2 --> EXPL["AI_COMPLETE<br/>explanation grounded in evidence"]
+    T2 --> UI["UI JSON<br/>center · dimension · dish nodes"]
+
+    INTENT -.->|nothing parsed| VEC
+
+    style T1 fill:#e8f4ff,stroke:#4a90d9
+    style T2 fill:#fff4e8,stroke:#d9904a
+    style UI fill:#f0e8ff,stroke:#8a4ad9
 ```
+
+The matched rows feeding `T2` **are** the graph edges — the UI renders them and invents
+nothing. The dotted line is the fallback: if nothing parses, V2 degrades to V1 behaviour,
+because imperfect beats empty.
 
 **Why `signals` is one `VARIANT` column, not one column per axis:** `AI_COMPLETE` already
 returns JSON, so it goes in as-is — no parsing, no flattening. Adding an axis later is not a
