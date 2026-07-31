@@ -10,3 +10,4 @@ data/*
 
 # curation_list is hand-authored, not RecipeNLG data — safe to commit
 !data/curation_list.csv
+wiki/.obsidian/

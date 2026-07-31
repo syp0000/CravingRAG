@@ -1,6 +1,6 @@
 ---
 axes:
-  fresh: 0.5
+  fresh: 0.8
 ---
 # juicy
 
