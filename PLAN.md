@@ -73,7 +73,8 @@ flowchart TD
     V1T[("V1.RECIPE_PROFILES<br/>sensory text + embedding")]
     V2T[("V2.RECIPE_SIGNALS<br/>signals VARIANT · evidence VARIANT")]
     ALIAS[("V2.EXCLUSION_ALIASES<br/>peanut → peanuts, peanut butter")]
-    WIKI[("V2.SENSORY_WIKI<br/>concept → axis, weight · ~25 rows")]
+    OBS["wiki/ Obsidian vault<br/>~25 markdown notes, axis weights in frontmatter"]
+    WIKI[("V2.SENSORY_WIKI<br/>compiled: concept → axis, weight")]
 
     CSV --> FILTER
     LIST --> FILTER
@@ -81,7 +82,7 @@ flowchart TD
     RAW -->|"W1.4 AI_COMPLETE + AI_EMBED"| V1T
     RAW -->|"W2.1 AI_COMPLETE + JSON schema"| V2T
     RAW -->|W3.1| ALIAS
-    WIKI -.hand-authored.-> V2T
+    OBS -->|W2.2 parser| WIKI
 
     style V1T fill:#e8f4ff,stroke:#4a90d9
     style V2T fill:#fff4e8,stroke:#d9904a
@@ -185,7 +186,7 @@ sweet, comforting`.
 | # | Task | Done when |
 |---|---|---|
 | **W2.1** | `AI_COMPLETE` + `response_format` → `V2.RECIPE_SIGNALS` (`signals`, `evidence` VARIANT) | `SELECT COUNT(*) WHERE signals:spicy IS NOT NULL AND evidence:spicy IS NULL` returns **0** |
-| **W2.2** | `V2.SENSORY_WIKI` — ~25 rows, hand-authored, one row per (concept, axis) | every axis a concept references exists in the fixed 6–8; `refreshing` and `comforting` both resolve |
+| **W2.2** | The **sensory wiki as an Obsidian vault**: `wiki/` in the repo, one markdown note per concept (~25), axis weights in frontmatter, prose + `[[links]]` for humans. A ~20-line parser compiles frontmatter → `V2.SENSORY_WIKI`. Obsidian's graph view is the debug surface (orphans, over-connected hubs). | every axis referenced exists in the fixed 6–8; `refreshing` and `comforting` both resolve; parser output row count = sum of frontmatter axis entries |
 | **W2.3** | Query parser prompt → `{"concepts": [...], "exclude": [...]}`, then wiki lookup → axis targets | `"spicy warm soup no peanuts"` parses; an unseen phrasing maps to a known concept rather than inventing an axis |
 | **W2.4** | Spot-check ~20 recipes against dishes you actually know | kimchi jjigae / pho / birria signals are defensible; anything wrong is an *enrichment* note, not a retrieval one |
 
