@@ -210,13 +210,13 @@ which is a common and hard-to-debug mistake.
 - [ ] Generate embeddings with AI_EMBED (`sql/03_embed.sql`)
 
 ### Phase 3 — Retrieval (second half of RAG)
-- [ ] Cosine-similarity Top-K query (`sql/04_search.sql`)
+- [ ] Cosine-similarity Top-K query (`archive/04_search_v1.sql`)
 - [ ] Type a real query in SQL and read the results
   - **This is the highlight of the project** — RAG working with no UI at all, just SQL
 
 ### Phase 4 — Generation + UI
 - [ ] Generate grounded explanations with CORTEX.COMPLETE
-- [ ] Streamlit app (`app/streamlit_app.py`)
+- [ ] Streamlit app (`archive/streamlit_app_v1.py`)
 
 ### Phase 5 — Evaluation (⭐ the resume differentiator — do not skip)
 

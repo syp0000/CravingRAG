@@ -30,7 +30,7 @@ def build_matchers(patterns: list[str]) -> dict[str, re.Pattern]:
     "mac and cheese" matches "Best Mac and Cheese Ever" but not "Mac and Cheeseburger".
     (Verified by test, not assumed — an earlier guard rejected 40+ patterns for nothing.)
     """
-    return {p: re.compile(rf"\b{re.escape(p)}\b", re.I) for p in patterns}
+    return {p: re.compile(rf"\b{re.escape(p)}s?\b", re.I) for p in patterns}
 
 
 def pick_matches(chunk: pd.DataFrame, matchers, cuisines, kept: dict, per_pattern: int) -> None:

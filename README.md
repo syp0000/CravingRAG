@@ -4,7 +4,7 @@
 
 > "something refreshing and bursting with juice" → 3 matching recipes + why each fits
 
-한국어 문서: [README.ko.md](README.ko.md) · [DESIGN.ko.md](DESIGN.ko.md)
+V1 docs and tools that were retired by the V2 plan live in [archive/](archive/).
 
 ---
 
@@ -59,7 +59,7 @@ runs on your laptop. Only the SQL runs in Snowflake.
 |---|---|---|
 | `pipelines/load_recipes.py` (dlt) | **your laptop** (venv) | needs internet access to HuggingFace; writes into Snowflake as a client |
 | `sql/*.sql` | **Snowflake** (Snowsight worksheet) | Cortex functions and vectors live in the warehouse |
-| `app/streamlit_app.py` | your laptop (or Streamlit in Snowflake later) | queries Snowflake as a client |
+| UI (W4, not yet built) | your laptop | the v1 app is archived at `archive/streamlit_app_v1.py` |
 
 > Running the dlt script in a Snowflake notebook will fail with `ModuleNotFoundError: No module
 > named 'dlt'`. Do not install dlt into the notebook to fix that — a Snowflake notebook has no
@@ -114,8 +114,7 @@ Run the phases in order. Each one is independently verifiable.
 | 2 | Load recipes | `python pipelines/load_recipes.py --limit 50` |
 | 3 | Generate flavor profiles | run `sql/02_enrich.sql` |
 | 4 | Generate embeddings | run `sql/03_embed.sql` |
-| 5 | Search + explain | run `sql/04_search.sql` |
-| 6 | Launch the UI | `streamlit run app/streamlit_app.py` |
+| 5 | Search + explain (v1, archived) | `archive/04_search_v1.sql` |
 
 > ⚠️ **Start small.** Use `--limit 50` and keep `LIMIT 20` in `02_enrich.sql` on the first pass.
 > Running the LLM over all 13,501 recipes before validating the prompt wastes credits.
@@ -146,10 +145,11 @@ sql/
   01_setup.sql      account setup, Cortex availability check
   02_enrich.sql     ⭐ LLM document enrichment (the core idea)
   03_embed.sql      embeddings + an intuition-building similarity experiment
-  04_search.sql     retrieval + grounded generation, in pure SQL
 pipelines/
-  load_recipes.py   dlt ingestion
-app/
-  streamlit_app.py  UI
-DESIGN.md           full design rationale — read this first
+  load_recipes.py   dlt ingestion (v1 corpus)
+  curate.py         RecipeNLG → curated 342 rows (W1.2)
+  load_curated.py   curated.csv → Snowflake (W1.3)
+archive/            retired v1 files (UI, v1 search, Korean docs)
+PLAN.md             the V2 plan — read this first
+DESIGN.md           v1 findings that motivated V2
 ```
