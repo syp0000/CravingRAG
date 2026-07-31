@@ -11,7 +11,20 @@ defeats the point of the whole evaluation.
 Not "would I be annoyed to see it" (too lenient — everything scores 1 and no arm can be
 distinguished from another) and not "is this the single best answer" (too strict).
 
-Binary: `1` = deserves a top-5 slot, `0` = does not.
+V2 evaluation grades on a 0-3 scale (NDCG needs it; it collapses to binary for recall,
+where relevant = grade ≥ 2):
+
+| Grade | Meaning | Test |
+|---|---|---|
+| **3** | exactly this | "that's what I meant" |
+| **2** | happy to see it | passes every rule, solid answer |
+| **1** | defensible but weak | near-category, partial attribute match |
+| **0** | wrong | violates a binding rule, or irrelevant |
+
+**An exclusion violation is an automatic 0** regardless of how well everything else
+matches — a peanut dish for "without peanuts" fails at any level of deliciousness.
+All rules below apply unchanged; they decide *whether* something can score ≥ 1,
+and the grade expresses *how well* it fits.
 
 ## Judge from the profile, not from knowledge of the dish
 

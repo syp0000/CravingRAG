@@ -1,143 +1,70 @@
 # ============================================================
-# Phase 5 evaluation set
+# V2 evaluation queries — FROZEN as of 2026-07-31 (W1.5)
 # ============================================================
-# HOW TO USE
-#   1. Freeze a fixed corpus subset (~200 enriched recipes) and evaluate against only that.
-#      A small fully-labeled corpus beats a large partially-labeled one.
-#   2. For each query below, fill `relevant_uids` with the uids that SHOULD be retrieved.
-#      Shortcut: have an LLM propose candidates, then verify by hand.
-#      ⚠️ If you do that, say so in the README — LLM-assisted labels bias results toward
-#         what an LLM considers similar, which is the very thing being measured.
-#   3. Run all three arms (A: raw ingredients, B: enriched, C: enriched + hybrid)
-#      and compute Recall@5 per query, then average.
+# These 15 queries are judged against BOTH systems (V1 baseline, then V2), graded 0-3
+# per eval/JUDGING.md. Do not reword after judging starts — a changed query between the
+# two rounds invalidates the comparison.
 #
-#   Recall@5 = |relevant ∩ top5| / min(5, |relevant|)
+# Every query was verified to have >=3 answer candidates in the curated 342-row corpus
+# before freezing (exclusion queries verified to contain dishes that MUST be removed:
+# kung pao / pad thai carry peanuts, marzipan / macaron / frangipane carry almond,
+# clam chowder / tom yum / crab cake carry shellfish).
 #
-# Aim for 3-5 relevant recipes per query. Queries with 0 labels are unusable; queries with
-# 20+ make Recall@5 meaningless.
-# ============================================================
+# Grading: 3 = perfect match · 2 = good · 1 = somewhat relevant · 0 = irrelevant
+# (0-3 collapses to binary for Recall@5; NDCG@5 uses the grades directly.)
 
 queries:
-  # --- sensory: the queries this project exists to answer -------------------
+  # --- sensory ---------------------------------------------------------------
   - id: q01
-    text: "something refreshing and bursting with juice"
+    text: "spicy warm soup"
     category: sensory
-    relevant_uids: []
-
   - id: q02
-    text: "rich creamy and indulgent"
+    text: "refreshing juicy dish"
     category: sensory
-    relevant_uids: []
-
   - id: q03
+    text: "rich comforting meal"
+    category: sensory
+  - id: q04
     text: "crispy on the outside, tender inside"
     category: sensory
-    relevant_uids: []
-
-  - id: q04
-    text: "spicy enough to make me sweat"
-    category: sensory
-    relevant_uids: []
-
   - id: q05
     text: "light and clean, nothing heavy"
     category: sensory
-    relevant_uids: []
-
   - id: q06
-    text: "warm and comforting, like a hug"
+    text: "savory noodle soup"
     category: sensory
-    relevant_uids: []
 
-  # --- occasion / mood -----------------------------------------------------
+  # --- occasion --------------------------------------------------------------
   - id: q07
-    text: "cozy dinner for a cold rainy day"
+    text: "cozy dinner for a cold day"
     category: occasion
-    relevant_uids: []
-
   - id: q08
-    text: "something to cure a hangover"
+    text: "quick casual lunch"
     category: occasion
-    relevant_uids: []
-
   - id: q09
-    text: "impressive but easy dish for guests"
+    text: "sweet treat for a celebration"
     category: occasion
-    relevant_uids: []
-
   - id: q10
-    text: "quick lunch I can eat at my desk"
+    text: "summer picnic food"
     category: occasion
-    relevant_uids: []
-
   - id: q11
-    text: "palate cleanser after something greasy"
+    text: "something cold for a hot day"
     category: occasion
-    relevant_uids: []
 
+  # --- exclusion: the designed-in V2 win -------------------------------------
+  # V1 has no exclusion mechanism; these are EXPECTED to fail in the baseline.
+  # That failing number is what makes V2's fix legible.
   - id: q12
-    text: "summer picnic food that travels well"
-    category: occasion
-    relevant_uids: []
-
-  # --- constraint: where PURE VECTOR SEARCH IS EXPECTED TO STRUGGLE ---------
-  # These need exact-term matching, which is why hybrid search (arm C) should win here.
-  # If C does not beat B on this category specifically, investigate before reporting.
+    text: "spicy dish without peanuts"
+    category: exclusion
   - id: q13
-    text: "vegetarian, no meat at all"
-    category: constraint
-    relevant_uids: []
-
+    text: "comforting dessert without almonds"
+    category: exclusion
   - id: q14
-    text: "ready in under 30 minutes"
-    category: constraint
-    relevant_uids: []
+    text: "warm soup with no shellfish"
+    category: exclusion
 
+  # --- constraint ------------------------------------------------------------
   - id: q15
-    text: "no oven required"
+    text: "rich chocolate dessert"
     category: constraint
-    relevant_uids: []
-
-  - id: q16
-    text: "chocolate dessert"
-    category: constraint
-    relevant_uids: []
-
-  # --- cross-lingual: Korean query against the English corpus ---------------
-  # Tests that the multilingual embedding model actually earns its place.
-  # If these score near zero, the wrong model is configured.
-  - id: q17
-    text: "상큼하고 과즙이 터지는"
-    category: cross_lingual
-    relevant_uids: []
-
-  - id: q18
-    text: "해장되는 뜨끈한 국물"
-    category: cross_lingual
-    relevant_uids: []
-
-  - id: q19
-    text: "비 오는 날 어울리는 따뜻한 음식"
-    category: cross_lingual
-    relevant_uids: []
-
-  - id: q20
-    text: "느끼한 거 먹고 난 다음 입가심"
-    category: cross_lingual
-    relevant_uids: []
-
-# ============================================================
-# Report template (fill in after running — put this in the README)
-# ============================================================
-# | Arm | Recall@5 | Indexing credits | Cost / query |
-# |-----|----------|------------------|--------------|
-# | A — raw ingredients, vector      |  |  |  |
-# | B — enriched profile, vector     |  |  |  |
-# | C — enriched profile, hybrid     |  |  |  |
-#
-# Break Recall@5 down BY CATEGORY too. The headline average hides the interesting story:
-# the expected result is B >> A on sensory, and C >> B on constraint.
-# If the per-category pattern does not match that, the explanation is the finding.
-#
-# Worst 3-5 queries + one-line diagnosis each:
-#   - qNN: ...
