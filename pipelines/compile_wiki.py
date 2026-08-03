@@ -25,7 +25,7 @@ AXES = {"spicy", "warm", "brothy", "savory", "rich", "fresh", "sweet", "comforti
 
 def parse_note(path: Path) -> list[tuple[str, str, float]]:
     """One note → [(concept, axis, weight), ...]. Empty axes (gap notes) → []."""
-    # TODO: read the file, take the text between the first two '---' lines,
+    # read the file, take the text between the first two '---' lines,
     #       and pull the `axis: weight` pairs out of the `axes:` block.
     #
     # The frontmatter is intentionally simple enough to parse by hand:
@@ -38,17 +38,35 @@ def parse_note(path: Path) -> list[tuple[str, str, float]]:
     #
     # No YAML library needed: split lines, strip, split on ':'.
     # concept = path.stem
-    raise NotImplementedError
+    concept = path.stem                          # "refreshing"
+    front = path.read_text().split("---")[1]
+    rows = []
+    for line in front.splitlines():
+        line = line.strip()
+        if not line or line.startswith("axes:"):
+            continue
+        axis, weight = line.split(":", 1)
+        axis = axis.strip()
+        weight = float(weight.strip())
+        rows.append((concept, axis, weight))
+    return rows
 
 
 def validate(rows: list[tuple[str, str, float]]) -> list[str]:
     """Return a list of problems. Empty list = good to load."""
     problems = []
-    # TODO, one check per line of the W2.2 done-when:
-    #   1. every axis is in AXES (a typo like 'frsh' must fail here, not at query time)
-    #   2. every weight is between 0.0 and 1.0
-    #   3. 'refreshing' and 'comforting' both resolve (present with >=1 axis)
-    raise NotImplementedError
+    #  every axis is in AXES (a typo like 'frsh' must fail here, not at query time)
+    #  every weight is between 0.0 and 1.0
+    #  'refreshing' and 'comforting' both resolve (present with >=1 axis)
+    for required in ["refreshing", "comforting"]:
+        if not any(r[0] == required for r in rows):
+            problems.append(f"required concept '{required}' is missing")
+    for concept, axis, weight in rows:
+        if axis not in AXES:
+            problems.append(f"unknown axis '{axis}' for concept '{concept}'")
+        if not (0.0 <= weight <= 1.0):
+            problems.append(f"weight {weight} out of range for concept '{concept}', axis '{axis}'")
+    return problems
 
 
 def load(rows: list[tuple[str, str, float]]) -> None:
