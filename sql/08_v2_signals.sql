@@ -12,7 +12,7 @@
 -- Model stays mistral-large2: V1 used it, so the LLM is held constant and the V1-vs-V2
 -- delta attributes to the representation, not the model.
 --
--- ⚠️ Run in order. ① is a 20-row prompt check — do not run ③ until ② looks right.
+-- ⚠️ Run in order. ② is a 20-row prompt check — do not run ④ until ③ looks right.
 -- ============================================================
 
 USE DATABASE CRAVING_RAG;
@@ -21,44 +21,62 @@ USE WAREHOUSE CRAVING_WH;
 CREATE SCHEMA IF NOT EXISTS V2;
 
 -- ------------------------------------------------------------
--- ① Raw responses, 20-row test batch first (v1 lesson: validate before scaling)
+-- ① Signal extractor. Keep the prompt in ONE function so the 20-row test, full run,
+--    and retries cannot drift apart.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION V2.EXTRACT_RECIPE_SIGNALS(
+    dish_title STRING,
+    dish_ingredients STRING,
+    dish_directions STRING
+)
+RETURNS VARIANT
+AS
+$$
+PARSE_JSON(AI_COMPLETE(
+    model => 'mistral-large2',
+    prompt => CONCAT(
+        'Rate this dish on sensory axes: spicy, warm, brothy, savory, rich, fresh, ',
+        'sweet, comforting.\n',
+        'Include an axis ONLY if the ingredients or method below give concrete ',
+        'evidence for it — omit unsupported axes entirely. Do not guess.\n',
+        'value: 0.0 to 1.0. evidence: the exact ingredient or method words that ',
+        'justify the value, copied from the text below.\n',
+        'evidence must be words from the Ingredients or Method lines only — ',
+        'never the dish name itself.\n',
+        'warm means served hot; fresh means bright/raw/citrusy; rich means heavy, ',
+        'creamy, or indulgent (butter, cream, fatty meat) — a small amount of oil ',
+        'or nuts in an otherwise light dish is not rich.\n\n',
+        'Dish: ', dish_title, '\n',
+        'Ingredients: ', LEFT(dish_ingredients, 600), '\n',
+        'Method: ', LEFT(dish_directions, 300)
+    ),
+    model_parameters => {'max_tokens': 1200},
+    response_format => {
+        'type': 'json',
+        'schema': {'type':'object','properties':{
+            'axes':{'type':'array','items':{'type':'object','properties':{
+                'axis':{'type':'string',
+                        'enum':['spicy','warm','brothy','savory','rich','fresh','sweet','comforting']},
+                'value':{'type':'number'},
+                'evidence':{'type':'array','items':{'type':'string'}}},
+                'required':['axis','value','evidence']}}},
+            'required':['axes']}
+    }
+))
+$$;
+
+-- ------------------------------------------------------------
+-- ② Raw responses, 20-row test batch first (v1 lesson: validate before scaling)
 -- ------------------------------------------------------------
 CREATE OR REPLACE TABLE V2.SIGNALS_RAW AS
 SELECT
     recipe_id, title, cuisine, pattern,
-    PARSE_JSON(AI_COMPLETE(
-        model => 'mistral-large2',
-        prompt => CONCAT(
-            'Rate this dish on sensory axes: spicy, warm, brothy, savory, rich, fresh, ',
-            'sweet, comforting.\n',
-            'Include an axis ONLY if the ingredients or method below give concrete ',
-            'evidence for it — omit unsupported axes entirely. Do not guess.\n',
-            'value: 0.0 to 1.0. evidence: the exact ingredient or method words that ',
-            'justify the value, copied from the text below.\n',
-            'warm means served hot; fresh means bright/raw/citrusy; rich means heavy ',
-            'or fatty.\n\n',
-            'Dish: ', title, '\n',
-            'Ingredients: ', LEFT(ingredients, 600), '\n',
-            'Method: ', LEFT(directions, 300)
-        ),
-        model_parameters => {'max_tokens': 1200},
-        response_format => {
-            'type': 'json',
-            'schema': {'type':'object','properties':{
-                'axes':{'type':'array','items':{'type':'object','properties':{
-                    'axis':{'type':'string',
-                            'enum':['spicy','warm','brothy','savory','rich','fresh','sweet','comforting']},
-                    'value':{'type':'number'},
-                    'evidence':{'type':'array','items':{'type':'string'}}},
-                    'required':['axis','value','evidence']}}},
-                'required':['axes']}
-        }
-    )) AS resp
+    V2.EXTRACT_RECIPE_SIGNALS(title, ingredients, directions) AS resp
 FROM raw.curated_recipes
-LIMIT 20;                      -- 👈 ③ removes this
+LIMIT 20;
 
 -- ------------------------------------------------------------
--- ② Inspect the test batch — READ THESE before scaling
+-- ③ Inspect the test batch — READ THESE before scaling
 -- ------------------------------------------------------------
 -- Values in range? Evidence words actually from the ingredients? Unsupported axes absent?
 SELECT title,
@@ -75,12 +93,17 @@ FROM V2.SIGNALS_RAW, LATERAL FLATTEN(input => resp:axes) f
 WHERE ARRAY_SIZE(f.value:evidence) = 0;
 
 -- ------------------------------------------------------------
--- ③ Looks good? Re-run ① WITHOUT the LIMIT (342 rows, one call each — cheaper than
---    V1 enrichment, which took two calls per recipe). Then continue below.
+-- ④ Full run. Execute this only after the 20-row check looks right.
+--    342 rows, one call each — cheaper than V1 enrichment, which took two calls per recipe.
 -- ------------------------------------------------------------
+CREATE OR REPLACE TABLE V2.SIGNALS_RAW AS
+SELECT
+    recipe_id, title, cuisine, pattern,
+    V2.EXTRACT_RECIPE_SIGNALS(title, ingredients, directions) AS resp
+FROM raw.curated_recipes;
 
 -- ------------------------------------------------------------
--- ③-b RETRY transient failures. On the first full run 14 of 342 responses came back
+-- ④-b RETRY transient failures. On the first full run 14 of 342 responses came back
 --     NULL — sporadic AI_COMPLETE failures, unrelated to input length, and the casualties
 --     included Pad Thai (q12's exclusion target) and Basic Vegetarian Pho (q06).
 --     Delete the NULLs and regenerate just those rows. Repeat until the count is 0.
@@ -90,45 +113,15 @@ DELETE FROM V2.SIGNALS_RAW WHERE resp IS NULL;
 INSERT INTO V2.SIGNALS_RAW
 SELECT
     recipe_id, title, cuisine, pattern,
-    PARSE_JSON(AI_COMPLETE(
-        model => 'mistral-large2',
-        prompt => CONCAT(
-            'Rate this dish on sensory axes: spicy, warm, brothy, savory, rich, fresh, ',
-            'sweet, comforting.\n',
-            'Include an axis ONLY if the ingredients or method below give concrete ',
-            'evidence for it — omit unsupported axes entirely. Do not guess.\n',
-            'value: 0.0 to 1.0. evidence: the exact ingredient or method words that ',
-            'justify the value, copied from the text below.\n',
-            'evidence must be words from the Ingredients or Method lines only — ',
-            'never the dish name itself.\n',
-            'warm means served hot; fresh means bright/raw/citrusy; rich means heavy, ',
-            'creamy, or indulgent (butter, cream, fatty meat) — a small amount of oil ',
-            'or nuts in an otherwise light dish is not rich.\n\n',
-            'Dish: ', title, '\n',
-            'Ingredients: ', LEFT(ingredients, 600), '\n',
-            'Method: ', LEFT(directions, 300)
-        ),
-        model_parameters => {'max_tokens': 1200},
-        response_format => {
-            'type': 'json',
-            'schema': {'type':'object','properties':{
-                'axes':{'type':'array','items':{'type':'object','properties':{
-                    'axis':{'type':'string',
-                            'enum':['spicy','warm','brothy','savory','rich','fresh','sweet','comforting']},
-                    'value':{'type':'number'},
-                    'evidence':{'type':'array','items':{'type':'string'}}},
-                    'required':['axis','value','evidence']}}},
-                'required':['axes']}
-        }
-    )) AS resp
+    V2.EXTRACT_RECIPE_SIGNALS(title, ingredients, directions) AS resp
 FROM raw.curated_recipes
 WHERE recipe_id NOT IN (SELECT recipe_id FROM V2.SIGNALS_RAW);
 
 SELECT COUNT(*) AS remaining_nulls FROM V2.SIGNALS_RAW WHERE resp IS NULL;
--- > 0 → run ③-b again. 0 → continue.
+-- > 0 → run ④-b again. 0 → continue.
 
 -- ------------------------------------------------------------
--- ④ Final table: pivot the array into signals/evidence objects for easy access
+-- ⑤ Final table: pivot the array into signals/evidence objects for easy access
 --    signals:spicy::float  → 0.8, or NULL when the axis was omitted
 -- ------------------------------------------------------------
 -- Two fixes the first full run forced:
@@ -157,7 +150,7 @@ FROM raw.curated_recipes c
 LEFT JOIN agg a USING (recipe_id);
 
 -- ------------------------------------------------------------
--- ⑤ Done-when checks
+-- ⑥ Done-when checks
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS rows_expected_342 FROM V2.RECIPE_SIGNALS;
 

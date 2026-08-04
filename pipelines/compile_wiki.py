@@ -23,31 +23,64 @@ WIKI = REPO / "wiki"
 AXES = {"spicy", "warm", "brothy", "savory", "rich", "fresh", "sweet", "comforting"}
 
 
+class WikiParseError(ValueError):
+    """Raised when a wiki note's machine-readable frontmatter is malformed."""
+
+
+def frontmatter_lines(path: Path) -> list[str]:
+    """Return frontmatter lines without the opening/closing delimiters."""
+    lines = path.read_text().splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise WikiParseError(f"{path.name}: missing opening frontmatter delimiter")
+
+    for idx, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return lines[1:idx]
+
+    raise WikiParseError(f"{path.name}: missing closing frontmatter delimiter")
+
+
 def parse_note(path: Path) -> list[tuple[str, str, float]]:
     """One note → [(concept, axis, weight), ...]. Empty axes (gap notes) → []."""
-    # read the file, take the text between the first two '---' lines,
-    #       and pull the `axis: weight` pairs out of the `axes:` block.
-    #
-    # The frontmatter is intentionally simple enough to parse by hand:
-    #   ---
-    #   axes:
-    #     fresh: 1.0
-    #     warm: 0.0
-    #   ---
-    # (or `axes: {}` for the gap notes — those return [].)
-    #
-    # No YAML library needed: split lines, strip, split on ':'.
-    # concept = path.stem
-    concept = path.stem                          # "refreshing"
-    front = path.read_text().split("---")[1]
+    concept = path.stem
     rows = []
-    for line in front.splitlines():
-        line = line.strip()
-        if not line or line.startswith("axes:"):
+    in_axes = False
+
+    for raw_line in frontmatter_lines(path):
+        stripped = raw_line.strip()
+        if not stripped:
             continue
-        axis, weight = line.split(":", 1)
+
+        if stripped == "axes:":
+            in_axes = True
+            continue
+
+        if stripped == "axes: {}":
+            in_axes = False
+            continue
+
+        if stripped.startswith("axes:"):
+            raise WikiParseError(f"{path.name}: axes must be a block or {{}}")
+
+        if not in_axes:
+            continue
+
+        if not raw_line.startswith("  "):
+            in_axes = False
+            continue
+
+        if ":" not in stripped:
+            raise WikiParseError(f"{path.name}: malformed axis row {stripped!r}")
+
+        axis, raw_weight = stripped.split(":", 1)
+        try:
+            weight = float(raw_weight.strip())
+        except ValueError as exc:
+            raise WikiParseError(
+                f"{path.name}: invalid weight for axis '{axis.strip()}'"
+            ) from exc
+
         axis = axis.strip()
-        weight = float(weight.strip())
         rows.append((concept, axis, weight))
     return rows
 
@@ -95,10 +128,14 @@ def main() -> None:
     args = ap.parse_args()
 
     rows = []
+    parse_errors = []
     for path in sorted(WIKI.glob("*.md")):
-        rows.extend(parse_note(path))
+        try:
+            rows.extend(parse_note(path))
+        except WikiParseError as exc:
+            parse_errors.append(str(exc))
 
-    problems = validate(rows)
+    problems = parse_errors + validate(rows)
     if problems:
         print("FAILED validation:")
         for p in problems:

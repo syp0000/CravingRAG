@@ -55,6 +55,9 @@
 USE DATABASE CRAVING_RAG;
 USE WAREHOUSE CRAVING_WH;
 
+CREATE SCHEMA IF NOT EXISTS V2;
+CREATE SCHEMA IF NOT EXISTS EVAL2;
+
 -- ------------------------------------------------------------
 -- ① Parser as a function, so W3's scoring can call it per query
 -- ------------------------------------------------------------
@@ -110,7 +113,63 @@ $$
 $$;
 
 -- ------------------------------------------------------------
--- ③ Done-when checks
+-- ③ Exclusion alias table shell. W3 fills this out; creating it here keeps parser
+--    diagnostics runnable before retrieval exists.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS V2.EXCLUSION_ALIASES (
+    canonical_term STRING,
+    alias_term     STRING
+);
+
+-- ------------------------------------------------------------
+-- ④ Freeze eval parses exactly once for W3 scoring.
+-- ------------------------------------------------------------
+-- AI_COMPLETE is not a deterministic lookup table. Materializing the parser output keeps
+-- W3 from repeatedly calling the LLM, saves credits, and prevents one query's concepts
+-- and exclusions from coming from two different parses.
+CREATE OR REPLACE TABLE EVAL2.PARSES AS
+SELECT
+    query_id,
+    category,
+    query_text,
+    V2.PARSE_CRAVING(query_text) AS parsed,
+    CURRENT_TIMESTAMP()          AS parsed_at
+FROM EVAL2.QUERIES;
+
+CREATE OR REPLACE VIEW EVAL2.PARSE_TARGETS AS
+WITH parsed_concepts AS (
+    SELECT
+        p.query_id,
+        c.value::string AS concept
+    FROM EVAL2.PARSES p,
+         LATERAL FLATTEN(input => p.parsed:concepts) c
+)
+SELECT
+    pc.query_id,
+    w.axis,
+    MAX(w.weight) AS target
+FROM parsed_concepts pc
+JOIN V2.SENSORY_WIKI w ON w.concept = pc.concept
+GROUP BY pc.query_id, w.axis;
+
+CREATE OR REPLACE VIEW EVAL2.UNREGISTERED_EXCLUSION_TERMS AS
+SELECT DISTINCT
+    e.value::string AS term
+FROM EVAL2.PARSES p,
+     LATERAL FLATTEN(input => p.parsed:exclude) e
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM V2.EXCLUSION_ALIASES a
+    WHERE a.canonical_term = e.value::string
+       OR a.alias_term = e.value::string
+);
+
+-- q05 intentionally exposes a parser edge case: "nothing heavy" can produce
+-- exclude:["heavy"]. Treat unregistered exclusions as string-match candidates or alias
+-- TODOs, never as "exclude everything because this term is unknown".
+
+-- ------------------------------------------------------------
+-- ⑤ Done-when checks
 -- ------------------------------------------------------------
 -- The worked example from PLAN's architecture diagram
 SELECT V2.PARSE_CRAVING('spicy warm soup, no peanuts') AS parsed;
@@ -136,16 +195,20 @@ SELECT V2.PARSE_CRAVING('warm noodle soup without cilantro') AS parsed;
 SELECT V2.PARSE_CRAVING('something my grandmother used to make') AS parsed;
 --   expect concepts = [] or a weak comforting; either is fine, an invented axis is not
 
--- All 15 eval queries at once — read the parses before trusting W3's numbers
+-- All 15 eval queries at once — read the frozen parses before trusting W3's numbers
 SELECT q.query_id, q.category, q.query_text,
-       V2.PARSE_CRAVING(q.query_text):concepts AS concepts,
-       V2.PARSE_CRAVING(q.query_text):exclude  AS exclude
-FROM EVAL2.QUERIES q
+       q.parsed:concepts AS concepts,
+       q.parsed:exclude  AS exclude
+FROM EVAL2.PARSES q
 ORDER BY q.query_id;
 --   q12/q13/q14 must have non-empty exclude — those are the queries V2 exists to fix.
 
+-- Axis targets used by W3 scoring; no LLM calls here.
+SELECT *
+FROM EVAL2.PARSE_TARGETS
+ORDER BY query_id, axis;
+
 -- Unregistered exclusion terms = the alias table's to-do list
-SELECT DISTINCT e.value::string AS term
-FROM EVAL2.QUERIES q,
-     TABLE(FLATTEN(input => V2.PARSE_CRAVING(q.query_text):exclude)) e
-WHERE NOT EXISTS (SELECT 1 FROM V2.EXCLUSION_ALIASES a WHERE a.canonical_term = e.value::string);
+SELECT *
+FROM EVAL2.UNREGISTERED_EXCLUSION_TERMS
+ORDER BY term;

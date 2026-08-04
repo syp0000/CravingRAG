@@ -1,155 +1,199 @@
-# 🍊 CravingRAG
+# CravingRAG
 
-**Describe a craving in plain language — get real recipes back, with reasons.**
+**Describe a craving in plain language. Get real recipes back, with reasons.**
 
-> "something refreshing and bursting with juice" → 3 matching recipes + why each fits
+> "something refreshing and juicy" -> dishes that match the sensory intent, not just a
+> keyword.
 
-V1 docs and tools that were retired by the V2 plan live in [archive/](archive/).
+CravingRAG is a Snowflake-native RAG project for recipe search. The project exists to test a
+specific retrieval idea: food cravings are usually sensory or situational, so recipe search
+gets better when recipes are rewritten into retrievable sensory representations before they
+are embedded.
 
----
+## Current Status
 
-## What this is
+**V2 rebuild in progress.** The baseline is complete and measured; the current work is the
+structured-signals retriever described in [PLAN.md](PLAN.md).
 
-A retrieval-augmented generation (RAG) pipeline built entirely inside Snowflake. Keyword search
-cannot answer *"something refreshing and bursting with juice"* — that requires semantic search
-over embeddings. This project makes that work, and measures how well.
+| Milestone | Status | Evidence |
+|---|---:|---|
+| Curated RecipeNLG corpus | Done | `data/curation_list.csv` -> local `data/curated.csv` |
+| V1 enriched-vector baseline | Done | `sql/06_v1_baseline.sql` |
+| Baseline evaluation | Done | [eval/results_baseline.md](eval/results_baseline.md) |
+| V2 structured recipe signals | In progress | `sql/08_v2_signals.sql` |
+| V2 query parser + sensory wiki | In progress | `sql/09_query_parser.sql`, `wiki/`, `pipelines/compile_wiki.py` |
+| V2 retrieval + comparison | Next | W3 in [PLAN.md](PLAN.md) |
+| Constellation UI | Later | W4 in [PLAN.md](PLAN.md) |
 
-The key idea: instead of embedding raw ingredient lists (which never match sensory queries), an
-LLM first rewrites every recipe into a **sensory flavor profile**, and *that* is what gets
-indexed. See [DESIGN.md](DESIGN.md) for the full rationale.
+Baseline result, frozen on 2026-07-31:
 
-**Stack:** dlt · Snowflake (VECTOR, Cortex `AI_EMBED` + `AI_COMPLETE`) · Streamlit
+| Arm | NDCG@5 | Recall@5 |
+|---|---:|---:|
+| V1 enriched vector | 0.797 | 0.843 |
 
-> Cortex Search (hybrid keyword+vector retrieval with reranking and attribute filters) is
-> **not yet implemented** — it is the Phase 5 arm C comparison. The current pipeline is pure
-> `VECTOR_COSINE_SIMILARITY`, as the architecture below shows.
+The important baseline weakness is exclusion: **NDCG@5 = 0.504** for queries like
+`spicy dish without peanuts`. V2 is designed to move that number with hard ingredient
+exclusion plus structured sensory scoring.
 
-**No external API keys. No separate vector database.**
+## What Changed From V1 To V2
 
----
+V1 embeds one generated text profile per recipe:
+
+```text
+recipe -> sensory text profile -> AI_EMBED -> cosine search
+```
+
+V2 keeps the V1 baseline, then adds structured signals:
+
+```text
+recipe -> {spicy, warm, brothy, ...} + evidence
+query  -> concepts + exclusions -> sensory wiki -> target axes
+       -> hard exclusion filter -> attribute scoring
+```
+
+The sensory wiki is the project’s small hand-editable definition layer. It maps craving
+concepts such as `refreshing`, `cozy`, and `indulgent` onto fixed axes such as `fresh`,
+`warm`, `rich`, and `comforting`. This keeps the meaning of a craving in one place instead
+of burying it in a prompt.
+
+Read [DESIGN.md](DESIGN.md) for the original retrieval rationale and [DECISIONS.md](DECISIONS.md)
+for the V2 data-model tradeoffs.
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    CSV["RecipeNLG CSV<br/>local, not committed"]
+    CURATE["pipelines/curate.py<br/>curated 300-400 row corpus"]
+    RAW[("RAW.CURATED_RECIPES")]
+    V1[("V1.RECIPE_PROFILES<br/>sensory text + embedding")]
+    WIKI["wiki/*.md<br/>concept -> axis weights"]
+    SW[("V2.SENSORY_WIKI")]
+    SIG[("V2.RECIPE_SIGNALS<br/>signals + evidence VARIANT")]
+    PARSE[("EVAL2.PARSES<br/>frozen query parses")]
+    SCORE["W3 retrieval<br/>exclusion filter + axis scoring"]
+    EVAL["eval/results_v2.md<br/>baseline comparison"]
+
+    CSV --> CURATE --> RAW
+    RAW --> V1
+    RAW --> SIG
+    WIKI --> SW
+    SW --> SCORE
+    PARSE --> SCORE
+    SIG --> SCORE --> EVAL
 ```
-HuggingFace kaggle_food_recipes (13,501 recipes)
-        │  dlt — schema inference, merge by recipe_id
-        ▼
-   RAW.RECIPES
-        │  AI_COMPLETE — generate sensory flavor profile
-        ▼
-   ENRICHED.RECIPE_PROFILES
-        │  AI_EMBED — multilingual embeddings
-        ▼
-   SEARCH.RECIPE_VECTORS  (VECTOR(FLOAT, 1024))
-        │  VECTOR_COSINE_SIMILARITY — Top-K retrieval
-        │  AI_COMPLETE — grounded explanation
-        ▼
-   Streamlit UI
-```
 
----
+## Stack
 
-## Where each piece runs
+- Python: `dlt`, `pandas`
+- Snowflake: warehouses, schemas, `VECTOR`, `AI_EMBED`, `AI_COMPLETE`
+- Evaluation: frozen query set, pooled judgments, NDCG@5, Recall@5
+- Planned UI: Streamlit constellation graph
 
-This trips people up, so it is worth stating plainly: **dlt does not run inside Snowflake.**
-dlt is the client that pulls data from an external source and pushes it *into* Snowflake, so it
-runs on your laptop. Only the SQL runs in Snowflake.
+No external LLM API key or separate vector database is required.
 
-| Component | Runs where | Why |
-|---|---|---|
-| `pipelines/load_recipes.py` (dlt) | **your laptop** (venv) | needs internet access to HuggingFace; writes into Snowflake as a client |
-| `sql/*.sql` | **Snowflake** (Snowsight worksheet) | Cortex functions and vectors live in the warehouse |
-| UI (W4, not yet built) | your laptop | the v1 app is archived at `archive/streamlit_app_v1.py` |
+## Data And License Notes
 
-> Running the dlt script in a Snowflake notebook will fail with `ModuleNotFoundError: No module
-> named 'dlt'`. Do not install dlt into the notebook to fix that — a Snowflake notebook has no
-> outbound internet access by default, so it could not reach HuggingFace anyway. Run it locally.
+The V2 corpus is curated from RecipeNLG. RecipeNLG is for non-commercial research and
+educational use; do not commit the source CSV or generated extracts. This repo commits only
+the hand-authored curation list and evaluation metadata.
+
+Credit: RecipeNLG dataset by Poznan University of Technology researchers. Follow the
+RecipeNLG license and citation requirements when sharing results.
+
+The `.gitignore` intentionally excludes `data/*` except `data/curation_list.csv`.
 
 ## Setup
 
-### 1. Snowflake account
-Sign up for a [Snowflake free trial](https://signup.snowflake.com/) (30 days, $400 credits, no
-card required). Pick a region where Cortex is available — `AWS us-west-2` is a safe default.
+### 1. Python environment
 
-### 2. Python environment
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-### 3. Snowflake connection
-Create `~/.snowflake/connections.toml`:
-```toml
-[craving]
-account   = "YOUR_ACCOUNT_ID"
-user      = "YOUR_USER"
-password  = "YOUR_PASSWORD"
-warehouse = "CRAVING_WH"
-database  = "CRAVING_RAG"
-role      = "ACCOUNTADMIN"
-```
+### 2. Snowflake connection
 
-dlt reads credentials separately. Copy the template and fill it in:
+Run SQL in Snowsight using `CRAVING_WH`. Local Python scripts use dlt credentials:
+
 ```bash
 cp .dlt/example.secrets.toml .dlt/secrets.toml
 ```
 
-> ⚠️ Two things reliably go wrong here:
-> 1. `host` is the **account identifier** (`kgiotue-wn98412`), not the full URL.
-> 2. **Password auth will not work.** Snowflake enforces MFA and rejects password-based
->    programmatic connections (`MFA authentication is required...`). Use **key pair auth** —
->    `.dlt/example.secrets.toml` has the three commands to set it up.
+Use key-pair auth for programmatic Snowflake access. Password auth commonly fails because
+Snowflake enforces MFA for programmatic connections. The example secrets file includes the
+key-pair setup commands.
 
-> Both `connections.toml` and `.dlt/secrets.toml` are gitignored. Never commit credentials.
+Never commit `.dlt/secrets.toml`, private keys, or generated RecipeNLG extracts.
 
----
+## Running The Current Pipeline
 
-## Running it
+### Baseline, already completed
 
-Run the phases in order. Each one is independently verifiable.
-
-| # | Step | Command |
-|---|---|---|
-| 1 | Create warehouse, database, schemas | run `sql/01_setup.sql` in Snowsight |
-| 2 | Load recipes | `python pipelines/load_recipes.py --limit 50` |
-| 3 | Generate flavor profiles | run `sql/02_enrich.sql` |
-| 4 | Generate embeddings | run `sql/03_embed.sql` |
-| 5 | Search + explain (v1, archived) | `archive/04_search_v1.sql` |
-
-> ⚠️ **Start small.** Use `--limit 50` and keep `LIMIT 20` in `02_enrich.sql` on the first pass.
-> Running the LLM over all 13,501 recipes before validating the prompt wastes credits.
-> Also set `AUTO_SUSPEND = 60` on the warehouse (step 1 does this) so idle time is not billed.
-
----
-
-## Project status
-
-> **V2 rebuild in progress** — see [PLAN.md](PLAN.md). The checklist below is the v1 plan,
-> kept for the record; Phases 6–8 are dropped in v2.
-
-- [x] Phase 1 — dlt ingestion
-- [x] Phase 2 — LLM document enrichment
-- [x] Phase 3 — vector retrieval
-- [~] Phase 4 — grounded generation ✅, Streamlit UI pending
-- [ ] Phase 5 — ⭐ evaluation: 3-arm Recall@5 benchmark (`eval/queries.yml`)
-- [ ] Phase 6 — constrained retrieval: pantry filter, pre-filter vs post-filter
-- [ ] Phase 7 — receipt photo → pantry (multimodal, optional)
-- [ ] Phase 8 — live REST API source (dlt rest_api) — grounds international dishes
-
----
-
-## Repo layout
-
+```bash
+python pipelines/curate.py --source ~/Downloads/archive/RecipeNLG_dataset.csv
+python pipelines/load_curated.py
 ```
+
+Then run these in Snowsight:
+
+```text
+sql/01_setup.sql
+sql/06_v1_baseline.sql
+sql/07_eval_baseline.sql
+```
+
+The saved baseline readout is [eval/results_baseline.md](eval/results_baseline.md).
+
+### V2, current path
+
+```bash
+python pipelines/compile_wiki.py --check
+python pipelines/compile_wiki.py
+```
+
+Then run in Snowsight:
+
+```text
+sql/08_v2_signals.sql
+sql/09_query_parser.sql
+```
+
+Next planned file: V2 retrieval/scoring SQL for W3.
+
+## Local Checks
+
+```bash
+python pipelines/compile_wiki.py --check
+python -m compileall pipelines
+python -m pytest pipelines -v
+```
+
+If `pytest` crashes before collecting tests, check that you are using the project venv rather
+than a global Python distribution.
+
+## Repo Layout
+
+```text
 sql/
-  01_setup.sql      account setup, Cortex availability check
-  02_enrich.sql     ⭐ LLM document enrichment (the core idea)
-  03_embed.sql      embeddings + an intuition-building similarity experiment
+  01_setup.sql          account setup and Cortex checks
+  06_v1_baseline.sql    frozen V1 baseline profiles + embeddings
+  07_eval_baseline.sql  baseline evaluation
+  08_v2_signals.sql     structured recipe signals
+  09_query_parser.sql   query parsing + frozen parses
 pipelines/
-  load_recipes.py   dlt ingestion (v1 corpus)
-  curate.py         RecipeNLG → curated 342 rows (W1.2)
-  load_curated.py   curated.csv → Snowflake (W1.3)
-archive/            retired v1 files (UI, v1 search, Korean docs)
-PLAN.md             the V2 plan — read this first
-DESIGN.md           v1 findings that motivated V2
+  curate.py             RecipeNLG -> curated local CSV
+  load_curated.py       curated CSV -> Snowflake
+  compile_wiki.py       wiki frontmatter -> V2.SENSORY_WIKI
+wiki/
+  *.md                  human-readable craving concepts + axis weights
+eval/
+  queries.yml           frozen evaluation queries
+  judgments_baseline.csv
+  parses_frozen.csv
+  results_baseline.md
+archive/
+  retired V1 files
 ```

@@ -1,7 +1,9 @@
 """Tests for compile_wiki. Run from repo root:  ./.venv/bin/pytest pipelines/ -v"""
 from pathlib import Path
 
-from compile_wiki import parse_note, validate, WIKI
+import pytest
+
+from compile_wiki import parse_note, validate, WIKI, WikiParseError
 
 
 def note(tmp_path: Path, body: str) -> Path:
@@ -20,6 +22,10 @@ def test_gap_note_returns_empty(tmp_path):
     p = note(tmp_path, "---\naxes: {}\n---\n# t\n\nbody\n")
     assert parse_note(p) == []
 
+def test_other_frontmatter_keys_are_ignored(tmp_path):
+    p = note(tmp_path, "---\ntitle: Test\naxes:\n  rich: 0.5\n---\n# t\n")
+    assert parse_note(p) == [("testconcept", "rich", 0.5)]
+
 def test_body_with_colons_is_ignored(tmp_path):
     # 'Related: [[x]]' in the body must not be parsed as an axis
     p = note(tmp_path, "---\naxes:\n  rich: 0.5\n---\n# t\n\nRelated: [[rich]]\n")
@@ -30,13 +36,17 @@ def test_real_wiki_note():
     assert ("refreshing", "fresh", 1.0) in rows
     assert len(rows) == 3
 
-def test_mangled_frontmatter_is_silently_empty(tmp_path):
+def test_mangled_frontmatter_fails_loudly(tmp_path):
     # The Obsidian Properties panel once wrote axes: "[object Object]".
-    # Current behavior: startswith("axes:") skips it -> note parses as a gap note.
-    # This is why validate's presence check exists — it is the safety net that
-    # turns this silent loss into a loud failure.
+    # That must fail before loading, not silently turn into a gap note.
     p = note(tmp_path, '---\naxes: "[object Object]"\n---\n# t\n')
-    assert parse_note(p) == []
+    with pytest.raises(WikiParseError):
+        parse_note(p)
+
+def test_missing_frontmatter_fails_loudly(tmp_path):
+    p = note(tmp_path, "# t\n\nbody\n")
+    with pytest.raises(WikiParseError):
+        parse_note(p)
 
 
 # ---------- validate ----------
