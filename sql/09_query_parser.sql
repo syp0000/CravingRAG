@@ -25,6 +25,31 @@
 --
 --   parse failure is not an error
 --       Empty concepts → the caller falls back to V1 vector search. Imperfect beats empty.
+--
+-- ============================================================
+-- 🔒 FROZEN 2026-08-03. W3 treats these parses as fixed input; changing the prompt
+--    between the V1 and V2 measurements would invalidate the comparison.
+--
+-- Parse of all 15 eval queries at freeze time. The three that matter are intact:
+--   q12 spicy + exclude:[peanut] · q13 comforting,sweet + exclude:[almond]
+--   q14 warm,brothy + exclude:[shellfish]
+--
+-- Two known oddities, deliberately NOT fixed — recorded so W3's numbers can say whether
+-- they matter. Prompt tuning here was already 3-for-4 and v1 burned a day on exactly
+-- this loop.
+--
+--   1. exclude leaks sensory words. q05 "light and clean, nothing heavy" produced
+--      concepts:[light, fresh] AND exclude:["heavy"]. exclude is an INGREDIENT filter;
+--      "heavy" matches nothing in NER, so it is inert — but it shows the open-vocabulary
+--      exclude field will accept non-ingredients. If W3 ever hard-fails on an unmatched
+--      exclusion term instead of ignoring it, this becomes a real bug.
+--
+--   2. residual concept padding. q09 "sweet treat for a celebration" picked up `fresh`;
+--      so did the probe "something my grandmother used to make" (comforting + fresh),
+--      where comforting alone was right. Side effect of the instruction that occasion
+--      words imply sensory concepts — the fix for q10's empty parse. One over-tagged
+--      concept costs a little precision; q10 returning nothing cost the whole query.
+--      Watch whether q09 underperforms in W3.
 -- ============================================================
 
 USE DATABASE CRAVING_RAG;
@@ -41,6 +66,10 @@ PARSE_JSON(AI_COMPLETE(
     model => 'mistral-large2',
     prompt => CONCAT(
         'Parse this food craving into concepts and exclusions.\n\n',
+        'Return EVERY allowed concept the craving implies, not just the strongest one. ',
+        '"rich comforting meal" is BOTH rich and comforting. ',
+        'Occasion words imply sensory concepts: a summer picnic implies cold and fresh; ',
+        'a cold day implies warm and comforting.\n',
         'concepts: pick ONLY from the allowed list. Choose the closest allowed concept ',
         'for what the user means — "succulent" or "moist" means juicy; "soup" or ',
         '"broth" means brothy; "hot" meaning temperature is warm, "hot" meaning chili ',

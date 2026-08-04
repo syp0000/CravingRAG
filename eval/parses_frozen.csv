@@ -1,0 +1,68 @@
+QUERY_ID,CATEGORY,QUERY_TEXT,CONCEPTS,EXCLUDE
+q01,sensory,spicy warm soup,"[
+  ""spicy"",
+  ""warm"",
+  ""brothy""
+]",[]
+q02,sensory,refreshing juicy dish,"[
+  ""juicy"",
+  ""cold""
+]",[]
+q03,sensory,rich comforting meal,"[
+  ""rich"",
+  ""comforting""
+]",[]
+q04,sensory,"crispy on the outside, tender inside","[
+  ""crispy"",
+  ""tender""
+]",[]
+q05,sensory,"light and clean, nothing heavy","[
+  ""light"",
+  ""fresh""
+]","[
+  ""heavy""
+]"
+q06,sensory,savory noodle soup,"[
+  ""savory"",
+  ""brothy""
+]",[]
+q07,occasion,cozy dinner for a cold day,"[
+  ""warm"",
+  ""comforting""
+]",[]
+q08,occasion,quick casual lunch,"[
+  ""light"",
+  ""cold""
+]",[]
+q09,occasion,sweet treat for a celebration,"[
+  ""sweet"",
+  ""fresh""
+]",[]
+q10,occasion,summer picnic food,"[
+  ""cold"",
+  ""fresh""
+]",[]
+q11,occasion,something cold for a hot day,"[
+  ""cold""
+]",[]
+q12,exclusion,spicy dish without peanuts,"[
+  ""spicy""
+]","[
+  ""peanut""
+]"
+q13,exclusion,comforting dessert without almonds,"[
+  ""comforting"",
+  ""sweet""
+]","[
+  ""almond""
+]"
+q14,exclusion,warm soup with no shellfish,"[
+  ""warm"",
+  ""brothy""
+]","[
+  ""shellfish""
+]"
+q15,constraint,rich chocolate dessert,"[
+  ""rich"",
+  ""sweet""
+]",[]
