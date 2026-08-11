@@ -36,8 +36,11 @@
 --    heuristic: remove rows whose title ENDS with sauce/dressing/glaze/batter/stock/
 --    wrapper/marinade/seasoning UNLESS it contains " with " or " and " — that keeps
 --    "Carnitas With Red Sauce" (a dish) while dropping "Fish Taco Sauce" (a condiment).
---    Measured: 9 removed, 4 kept, all correctly. Known gap: "Massaman Curry Paste"
---    survives ("paste" not in the list) — add terms as they surface, not preemptively.
+--    Widened to condiments (Siyeon's call): paste/marinade/rub/seasoning/ketchup/mustard/
+--    mayo/relish/syrup/jam/jelly/chutney/pesto/vinaigrette/dip. Split into two rules —
+--    unambiguous condiment words match anywhere (curry paste hid mid-title behind
+--    parens), ambiguous ones only at the end. 12 removed, verified. Only survivor by
+--    design: "...Salad With Avocado Dressing" — a salad, kept by the " with " guard.
 --
 -- 4. TEXTURE AXIS DELIBERATELY DEFERRED.
 --    q04 "crispy outside, tender inside" produces zero V2 candidates: no axis covers
@@ -46,6 +49,16 @@
 --    "graph gives precision, embeddings give coverage" split, working as designed.
 --    TRIGGER CONDITION for adding texture axes later: q04's fallback score in W3.3
 --    materially trails its V1 baseline (0.855), or texture queries grow beyond one.
+--
+-- 5. FALLBACK MUST STAY AUTOMATIC, AND ITS TRIGGER IS EARNED BY MEASUREMENT.
+--    q06 "savory noodle soup" returns broth dishes with no noodles (pozole, congee)
+--    scored 0 by the human judge. Tempting to route it to vector fallback like q04 —
+--    but q06 DOES parse (savory+brothy), so the current "empty parse → fallback" trigger
+--    doesn't catch it. A score-threshold trigger ("fall back if V2 score < X") repeats
+--    v1's absolute-threshold mistake: X is unknowable before measurement. So the trigger
+--    stays "empty parse" for now; whether q06 needs a coverage-based fallback is a
+--    question W3.3's number answers, not a guess to hardcode. The axis system can express
+--    "broth" but not "noodle" — same shape of gap as texture, recorded not patched.
 -- ============================================================
 
 USE DATABASE CRAVING_RAG;
@@ -85,8 +98,16 @@ searchable AS (
            LOWER(COALESCE(title,'') || ' ' || COALESCE(ingredients,'') || ' ' || COALESCE(ner,'')) AS hay,
            ner
     FROM raw.curated_recipes
-    WHERE NOT (LOWER(title) RLIKE '.*\\b(sauce|dressing|glaze|batter|stock|wrappers?|marinade|seasoning)\\s*$'
-               AND NOT (LOWER(title) LIKE '% with %' OR LOWER(title) LIKE '% and %'))
+    -- Split rule: pure-condiment words (paste, marinade, rub, seasoning, wrapper, batter)
+    -- match ANYWHERE — "Mussamun Curry Paste (Also Spelled Massaman)" hides the word mid-
+    -- title. Ambiguous words (sauce, dressing, dip, ...) match only at the END and only
+    -- without " with "/" and ", so "Carnitas With Red Sauce" (a dish) survives while
+    -- "Fish Taco Sauce" (a condiment) does not.
+    WHERE NOT (
+        LOWER(title) RLIKE '.*\\b(paste|marinade|rub|seasoning|wrappers?|batter)\\b.*'
+        OR (LOWER(title) RLIKE '.*\\b(sauce|dressing|glaze|stock|broth|ketchup|mustard|mayonnaise|mayo|relish|syrup|jam|jelly|chutney|pesto|vinaigrette|dip)\\s*$'
+            AND NOT (LOWER(title) LIKE '% with %' OR LOWER(title) LIKE '% and %'))
+    )
 ),
 excluded AS (                          -- fail closed: term or alias anywhere in the haystack
     SELECT DISTINCT p.query_id, s.recipe_id
