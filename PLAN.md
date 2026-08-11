@@ -3,6 +3,15 @@
 **One line:** a Snowflake-native recipe search that turns craving language into dish matches,
 then shows *why* each dish matched as a constellation graph.
 
+**Why it exists:** PantryAI (a previous project) generated recipes with an LLM — and taught
+its author that a model can satisfy every requested ingredient while still producing
+combinations that feel implausible. That raised the real question: instead of asking AI to
+*invent* a recipe, could you *retrieve* a real one that matches what someone feels like
+eating? The same failure resurfaced inside this project — v1's LLM wrote plausible-but-wrong
+flavor profiles (jjinppang described as "earthy") — which is why V2 requires evidence for
+every claim and stores NULL for anything it cannot ground. The evidence field is the
+anti-hallucination mechanism this project's origin demanded.
+
 V1 findings that motivated the rebuild: [DESIGN.md](DESIGN.md) §7.
 Judging rules (unchanged between V1 and V2): [eval/JUDGING.md](eval/JUDGING.md).
 
