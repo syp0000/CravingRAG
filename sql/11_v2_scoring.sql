@@ -2,7 +2,8 @@
 -- 11_v2_scoring.sql — W3.2: V2 retrieval + the graph edges that fall out of it
 -- ============================================================
 -- Pipeline per query:
---   parse (09, frozen) → component filter → exclusion, fail closed (10)
+--   parse (eval/parses_frozen.csv, loaded by pipelines/load_frozen_parses.py)
+--   → component filter → exclusion, fail closed (10, one view)
 --   → score survivors → rank + edges → vector fallback if nothing parsed
 --
 -- The structural claim: the scoring trace IS the explanation. Every V2_EDGES row is a
@@ -10,7 +11,7 @@
 --
 -- Materialized tables, not nested UDFs — Snowflake rejects subqueries inside UDF bodies
 -- ("Unsupported subquery type"), and tables are what W3.3 judges anyway. The LLM parse
--- runs 15 times total, in ①, never per row.
+-- runs ZERO times here — see ①.
 --
 -- ============================================================
 -- FINDINGS while building this (each found by a failing check, 2026-08-04):
@@ -59,24 +60,47 @@
 --    stays "empty parse" for now; whether q06 needs a coverage-based fallback is a
 --    question W3.3's number answers, not a guess to hardcode. The axis system can express
 --    "broth" but not "noodle" — same shape of gap as texture, recorded not patched.
+--
+-- 6. "FROZEN" WAS A LABEL, NOT A FACT (outside review, 2026-08-17).
+--    ① used to call V2.PARSE_CRAVING again — a fresh LLM roll each rebuild. Compared to
+--    the committed eval/parses_frozen.csv, q09 had already drifted ([sweet] vs
+--    [sweet, fresh]). Every V2 ranking before this date was scored against a parse that
+--    might not match the file the comparison claims to use. Now the file is loaded, never
+--    re-parsed. Same review: exclusion logic lived in two forms (UDF for tests, inline SQL
+--    for ranking) — collapsed into V2.EXCLUDED_PAIRS (sql/10); and ranking ties are now
+--    broken by recipe_id so a rebuild cannot silently reorder equal scores.
 -- ============================================================
 
 USE DATABASE CRAVING_RAG;
 USE WAREHOUSE CRAVING_WH;
 
 -- ------------------------------------------------------------
--- ① Parse each eval query once. 15 LLM calls, then never again.
+-- ① Parses: NOT computed here. Finding 6.
+--    .venv/bin/python pipelines/load_frozen_parses.py   → EVAL2.V2_PARSED (15 rows)
 -- ------------------------------------------------------------
-CREATE OR REPLACE TABLE EVAL2.V2_PARSED AS
-SELECT query_id, query_text, category,
-       V2.PARSE_CRAVING(query_text) AS parsed
-FROM EVAL2.QUERIES;
-
--- A NULL parse is the sporadic AI_COMPLETE failure seen in W2.1 and W2.3 — rerun ① if any.
-SELECT COUNT(*) AS null_parses FROM EVAL2.V2_PARSED WHERE parsed IS NULL;
+SELECT COUNT(*) AS frozen_parses_expected_15 FROM EVAL2.V2_PARSED;
 
 -- ------------------------------------------------------------
--- ② Edges: one row per (query, recipe, axis). Ranking and explanation, same rows.
+-- ② Searchable corpus: Finding 3's component filter, as a view so nothing else
+--    re-implements "what counts as a dish".
+-- ------------------------------------------------------------
+-- Split rule: pure-condiment words (paste, marinade, rub, seasoning, wrapper, batter)
+-- match ANYWHERE — "Mussamun Curry Paste (Also Spelled Massaman)" hides the word mid-
+-- title. Ambiguous words (sauce, dressing, dip, ...) match only at the END and only
+-- without " with "/" and ", so "Carnitas With Red Sauce" (a dish) survives while
+-- "Fish Taco Sauce" (a condiment) does not.
+CREATE OR REPLACE VIEW V2.SEARCHABLE_RECIPES AS
+SELECT recipe_id, title
+FROM raw.curated_recipes
+WHERE NOT (
+    LOWER(title) RLIKE '.*\\b(paste|marinade|rub|seasoning|wrappers?|batter)\\b.*'
+    OR (LOWER(title) RLIKE '.*\\b(sauce|dressing|glaze|stock|broth|ketchup|mustard|mayonnaise|mayo|relish|syrup|jam|jelly|chutney|pesto|vinaigrette|dip)\\s*$'
+        AND NOT (LOWER(title) LIKE '% with %' OR LOWER(title) LIKE '% and %'))
+);
+SELECT 342 - COUNT(*) AS components_removed_expected_12 FROM V2.SEARCHABLE_RECIPES;
+
+-- ------------------------------------------------------------
+-- ③ Edges: one row per (query, recipe, axis). Ranking and explanation, same rows.
 -- ------------------------------------------------------------
 CREATE OR REPLACE TABLE EVAL2.V2_EDGES AS
 WITH intent AS (                       -- craving → axis targets, MAX per axis so a side
@@ -85,40 +109,7 @@ WITH intent AS (                       -- craving → axis targets, MAX per axis
     JOIN V2.SENSORY_WIKI w ON w.concept = c.value::string
     GROUP BY p.query_id, w.axis
 ),
-axis_count AS (SELECT query_id, COUNT(*) AS n_axes FROM intent GROUP BY query_id),
-alias_map AS (
-    SELECT canonical_term AS term, alias FROM V2.EXCLUSION_ALIASES
-    UNION ALL SELECT DISTINCT canonical_term, canonical_term FROM V2.EXCLUSION_ALIASES
-),
-searchable AS (
-    -- Finding 1: NER is lossy, so the exclusion haystack is title + raw ingredients + NER.
-    -- Finding 3: the component heuristic lives here — a title ending in a component word
-    -- is dropped unless " with "/" and " marks it as a dish served with that component.
-    SELECT recipe_id,
-           LOWER(COALESCE(title,'') || ' ' || COALESCE(ingredients,'') || ' ' || COALESCE(ner,'')) AS hay,
-           ner
-    FROM raw.curated_recipes
-    -- Split rule: pure-condiment words (paste, marinade, rub, seasoning, wrapper, batter)
-    -- match ANYWHERE — "Mussamun Curry Paste (Also Spelled Massaman)" hides the word mid-
-    -- title. Ambiguous words (sauce, dressing, dip, ...) match only at the END and only
-    -- without " with "/" and ", so "Carnitas With Red Sauce" (a dish) survives while
-    -- "Fish Taco Sauce" (a condiment) does not.
-    WHERE NOT (
-        LOWER(title) RLIKE '.*\\b(paste|marinade|rub|seasoning|wrappers?|batter)\\b.*'
-        OR (LOWER(title) RLIKE '.*\\b(sauce|dressing|glaze|stock|broth|ketchup|mustard|mayonnaise|mayo|relish|syrup|jam|jelly|chutney|pesto|vinaigrette|dip)\\s*$'
-            AND NOT (LOWER(title) LIKE '% with %' OR LOWER(title) LIKE '% and %'))
-    )
-),
-excluded AS (                          -- fail closed: term or alias anywhere in the haystack
-    SELECT DISTINCT p.query_id, s.recipe_id
-    FROM EVAL2.V2_PARSED p
-    JOIN searchable s
-    JOIN LATERAL FLATTEN(input => p.parsed:exclude) t
-    LEFT JOIN alias_map a ON a.term = LOWER(t.value::string)
-    WHERE s.ner IS NULL OR LENGTH(TRIM(s.ner)) = 0
-       OR s.hay LIKE '%' || LOWER(t.value::string) || '%'
-       OR (a.alias IS NOT NULL AND s.hay LIKE '%' || a.alias || '%')
-)
+axis_count AS (SELECT query_id, COUNT(*) AS n_axes FROM intent GROUP BY query_id)
 SELECT i.query_id, s2.recipe_id, s2.title, i.axis,
        s2.signals[i.axis]::float AS dish_value,
        i.target,
@@ -128,18 +119,19 @@ SELECT i.query_id, s2.recipe_id, s2.title, i.axis,
 FROM intent i
 JOIN axis_count ac ON ac.query_id = i.query_id
 JOIN V2.RECIPE_SIGNALS s2 ON s2.signals[i.axis] IS NOT NULL   -- fail open on unmeasured
-JOIN searchable sr ON sr.recipe_id = s2.recipe_id             -- component filter applies
-LEFT JOIN excluded e ON e.query_id = i.query_id AND e.recipe_id = s2.recipe_id
+JOIN V2.SEARCHABLE_RECIPES sr ON sr.recipe_id = s2.recipe_id   -- component filter
+LEFT JOIN V2.EXCLUDED_PAIRS e ON e.query_id = i.query_id AND e.recipe_id = s2.recipe_id
 WHERE e.recipe_id IS NULL;                                    -- anti-join = hard filter
 
 -- ------------------------------------------------------------
--- ③ Ranked runs + vector fallback, same shape as EVAL2.RUNS for identical judging
+-- ④ Ranked runs + vector fallback, same shape as EVAL2.RUNS for identical judging
 -- ------------------------------------------------------------
 -- Finding 2: score = SUM(axis_score) / axes REQUESTED, not AVG over matched.
+-- Finding 6: recipe_id breaks ties deterministically.
 CREATE OR REPLACE TABLE EVAL2.V2_RUNS AS
 SELECT query_id, 'V2_structured' AS arm, recipe_id, title,
        ROW_NUMBER() OVER (PARTITION BY query_id
-                          ORDER BY SUM(axis_score)/MAX(n_axes) DESC, COUNT(*) DESC) AS rank,
+                          ORDER BY SUM(axis_score)/MAX(n_axes) DESC, COUNT(*) DESC, recipe_id) AS rank,
        SUM(axis_score)/MAX(n_axes) AS score,
        COUNT(*) AS axes_matched, MAX(n_axes) AS axes_requested,
        FALSE AS is_fallback
@@ -148,14 +140,16 @@ GROUP BY query_id, recipe_id, title
 QUALIFY rank <= 10;
 
 -- Finding 4: queries the axis system cannot express borrow V1's vector ranking.
+-- (arm filter matters: EVAL2.RUNS also holds the raw-text control arm since sql/12)
 INSERT INTO EVAL2.V2_RUNS
 SELECT r.query_id, 'V2_structured', r.recipe_id, r.title, r.rank,
        NULL, 0, 0, TRUE
 FROM EVAL2.RUNS r
-WHERE r.query_id NOT IN (SELECT DISTINCT query_id FROM EVAL2.V2_RUNS);
+WHERE r.arm = 'V1_baseline'
+  AND r.query_id NOT IN (SELECT DISTINCT query_id FROM EVAL2.V2_RUNS);
 
 -- ------------------------------------------------------------
--- ④ Done-when checks
+-- ⑤ Done-when checks
 -- ------------------------------------------------------------
 -- 🎯 THE EXCLUSION TEST. V1 put Almond Cake at rank 1 here (NDCG 0.307).
 SELECT rank, title, ROUND(score,3) AS score, axes_matched
@@ -176,7 +170,7 @@ FROM EVAL2.V2_EDGES
 WHERE query_id = 'q01' AND title ILIKE '%Gochujang Kimchi%' ORDER BY axis;
 
 -- Coverage: which queries produced no candidates at all → vector fallback territory
-SELECT q.query_id, q.query_text, COUNT(DISTINCT e.recipe_id) AS candidates
+SELECT q.query_text, COUNT(DISTINCT e.recipe_id) AS candidates
 FROM EVAL2.QUERIES q LEFT JOIN EVAL2.V2_EDGES e USING (query_id)
 GROUP BY q.query_id, q.query_text HAVING candidates = 0;
 -- q04 (crispy/tender) is the expected member: no axis covers texture, by design
