@@ -232,13 +232,44 @@ sweet, comforting`.
 | UI eats the schedule | Static graph is the deliverable; animation is W4.2, droppable. |
 | Judging drift | Same queries, same `JUDGING.md`, each round judged in one sitting. |
 
-## Weekend 5+ (stretch) — scale-up
+## Weekend 5+ — scale-up (this is what makes Snowflake the reason, not the venue)
 
-Only after the 400-row comparison is measured. Re-run the same pipeline at 30–50k rows and
-**measure what breaks**: duplicate flooding, hub re-emergence, NDCG drift, and credits per
-1k recipes. This is where "why Snowflake" stops being an argument and becomes a number.
+Only after the 342-row comparison is measured. Then, in this order:
+
+1. **Meter first.** Enrich a 1k batch (signals + V1 profile + raw embed) and read the
+   actual credits from `SNOWFLAKE.ACCOUNT_USAGE.CORTEX_FUNCTIONS_USAGE_HISTORY`. No
+   estimating from token counts — the meter is the number.
+2. **Extrapolate, then pick the ceiling.** credits/1k × N → the largest N the trial can
+   afford (target 20–50k). Curate that many from RecipeNLG with `curate.py`'s pattern
+   list widened, not the first-N-in-file order (see v3 sampling below).
+3. **Re-measure with the same frozen 15 queries** and the same judge, blinded pool as in
+   sql/12. Measure what breaks: duplicate flooding, hub re-emergence, NDCG drift,
+   exclusion recall on a corpus where NER gaps are more common, and credits per 1k.
+4. **If cost is the wall, cost is the result.** "mistral-large2 signals for 30k cost
+   $X" is a finding; the follow-up is the same 1k batch on a smaller model
+   (mistral-7b / llama3.1-8b) with signal quality measured against the large-model
+   signals — the quality-per-credit curve is a stronger story than a big number.
+
 Full 2.23M is embedding-only territory — signals enrichment scales linearly (~2.7B tokens
 for the full set) and does not fit a trial.
+
+## v3 — what the 2026-08-17 outside review asked for, deferred on purpose
+
+Recorded here so the README can point at it instead of pretending the gaps do not exist.
+None of this changes the number the current comparison reports; all of it decides how
+much that number can be trusted.
+
+| Item | Why it is not in W3/W4 |
+|---|---|
+| Independent holdout query set (30–50 cravings written by people who have not seen the axis definitions); the current 15 become the dev set | The current 15 were written to have answers in the corpus and to exercise exclusion — an acceptance suite, not a neutral benchmark. Needs other people and a corpus check per query. |
+| Full ablation between V1 and V2: enriched-vector + exclusion filter; structured scoring without exclusion; component filter on/off | Each arm is a re-judge of its new pairs. Arm A (raw text) is in now because it tests the original claim; the rest wait for the pooled process to be routine. |
+| Second annotator on a 20–30% subset, agreement reported | Test-retest of the single judge exists (κw 0.624 on 29 pairs). A second person is a scheduling problem, not a design one. |
+| Parser facets: dish type/form (`noodle`), occasion, operational constraint, residual text — with vector or lexical retrieval over the residual, so a query that parses but loses its key noun (q06) is not stranded | This is a representation change; changing it mid-measurement invalidates the V2 pool. Trigger: q06/q08/q10 trail V1 in the pooled numbers. |
+| `comforting` is an interpretation, not a grounded primitive — reconsider or re-ground | Known since W2.1 spot-checks; same mid-measurement rule. |
+| Mechanical evidence validation: substring traceability to the source text, value in [0,1], no duplicate axis per recipe | Cheap; do it before the scale-up run, where LLM drift is more likely. |
+| `curate.py` sampling: dedupe near-duplicates, require ingredient/method completeness, stratify by pattern, seeded random instead of first-3-in-file | Do it with the scale-up corpus, where source-order bias actually matters. |
+| Report confidence intervals (bootstrap over queries), cost, latency | Bootstrap over 15 queries is honest but wide; becomes meaningful with the holdout set. |
+| Framing: this is a retrieval study with an explanation layer, not yet RAG — it becomes RAG when retrieved recipes ground a generated answer | Naming, not code. Fix in README at W4.3. |
 
 ## Open
 
