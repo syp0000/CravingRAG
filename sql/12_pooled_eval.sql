@@ -51,6 +51,24 @@ FROM EVAL2.QUERY_VECTORS q CROSS JOIN V1.RECIPE_RAW_VECTORS v
 QUALIFY rank <= 10;
 
 -- ------------------------------------------------------------
+-- ①-b Arm V1_excluded: V1's ranking with V2's exclusion + component filter on top.
+--     The ablation the review asked for (same retriever, filters on/off) — and the
+--     overall winner (NDCG@5 0.844; see eval/results_v2.md).
+-- ------------------------------------------------------------
+DELETE FROM EVAL2.RUNS WHERE arm = 'V1_excluded';
+INSERT INTO EVAL2.RUNS
+SELECT q.query_id, 'V1_excluded', v.recipe_id, v.title,
+       ROW_NUMBER() OVER (PARTITION BY q.query_id
+                          ORDER BY VECTOR_COSINE_SIMILARITY(v.profile_vec, q.query_vec) DESC, v.recipe_id) AS rank,
+       VECTOR_COSINE_SIMILARITY(v.profile_vec, q.query_vec)
+FROM EVAL2.QUERY_VECTORS q
+JOIN V1.RECIPE_PROFILES v
+JOIN V2.SEARCHABLE_RECIPES sr ON sr.recipe_id = v.recipe_id
+LEFT JOIN V2.EXCLUDED_PAIRS e ON e.query_id = q.query_id AND e.recipe_id = v.recipe_id
+WHERE e.recipe_id IS NULL
+QUALIFY rank <= 10;
+
+-- ------------------------------------------------------------
 -- ② Every arm, one shape
 -- ------------------------------------------------------------
 CREATE OR REPLACE VIEW EVAL2.ALL_RUNS AS
