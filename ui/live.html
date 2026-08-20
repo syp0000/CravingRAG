@@ -217,10 +217,15 @@ document.getElementById('qform').onsubmit=async e=>{
   Object.values(stars).forEach(s=>{if(+s.el.getAttribute('opacity')>.3)s.el.setAttribute('opacity',.2);});
   await sleep(520);
   const cardW = W>900 ? 352 : 0;
-  const cx=(W-cardW)*0.52, cy=H*0.55, RR=Math.min(W-cardW,H)*0.27;
-  const pos=R.top.map((d,i)=>{const a=-Math.PI/2+i*(Math.PI*2/5);
-    return [cx+RR*Math.cos(a)*(1+(i%2)*.14), cy+RR*Math.sin(a)*(1+(i%2)*.11)];});
-  for(let i=0;i<R.top.length;i++){const [x1,y1]=pos[i],[x2,y2]=pos[(i+1)%R.top.length];
+  const cx=(W-cardW)*0.52, cy=H*0.55, RR=Math.min(W-cardW,H)*0.28;
+  // real constellations are irregular open chains, not polygons: walk I→V with
+  // seeded jitter on angle and radius so every query draws a different figure
+  const seed=R.top.reduce((s,d)=>s+d.recipe_id,0);
+  const jit=(k,lo,hi)=>lo+(hi-lo)*hash(seed*13+k*7);
+  const pos=R.top.map((d,i)=>{const a=-Math.PI/2 + i*(Math.PI*2/5) + (jit(i,-1,1))*0.55;
+    const r=RR*jit(i+9,0.55,1.15);
+    return [cx+r*Math.cos(a), cy+r*Math.sin(a)];});
+  for(let i=0;i<R.top.length-1;i++){const [x1,y1]=pos[i],[x2,y2]=pos[i+1];
     const l=S('line',{x1,y1,x2,y2,stroke:'var(--gold)',opacity:0,'stroke-width':.8});
     l.animate([{opacity:0},{opacity:.5}],{duration:950,delay:950+i*160,fill:'forwards'}); fin.push(l);}
   R.top.forEach((d,i)=>{const s=stars[d.recipe_id]; const [tx,ty]=pos[i];

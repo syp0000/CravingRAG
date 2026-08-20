@@ -100,8 +100,12 @@ def search(text):
     ranked, seen = [], set()
     for rid, title, sim in top:
         rid = int(rid)
-        if rid in excl or comp.get(rid):
+        # UI-only dedupe by normalized title (Siyeon's call): three "Hot And Sour Soup"
+        # stars tell the viewer nothing — eval keeps every row, the sky keeps one per name
+        name = " ".join(title.lower().split())
+        if rid in excl or comp.get(rid) or name in seen:
             continue
+        seen.add(name)
         ranked.append({"recipe_id": rid, "title": title.strip(), "sim": float(sim)})
         if len(ranked) == 5:
             break
