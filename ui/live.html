@@ -159,8 +159,14 @@ for(let i=0;i<170;i++){const g=Math.random()<.12;
   const c=S('circle',{cx:Math.random()*W,cy:Math.random()*H,r:Math.random()*.9+.2,
     fill:g?'#d9b76a':'#e9e4d4',opacity:(Math.random()*.3+.05).toFixed(2)});
   c.innerHTML=`<animate attributeName="opacity" values="${c.getAttribute('opacity')};.02;${c.getAttribute('opacity')}" dur="${(3+Math.random()*6).toFixed(1)}s" repeatCount="indefinite"/>`;}
+let CATALOG_N=0;
 fetch('/catalog').then(r=>r.json()).then(cat=>{
-  cat.forEach(d=>{const x=44+hash(d.recipe_id)*(W-88), y=64+hash(d.recipe_id*7+13)*(H-150);
+  CATALOG_N=cat.length;
+  // the sky RENDERS a deterministic ~800-star sample; ranking and the counters always
+  // use the full catalog server-side (20k SMIL animations would melt the browser)
+  const p=Math.min(1, 800/cat.length);
+  cat.forEach(d=>{ if(hash(d.recipe_id*17+5)>p) return;
+    const x=44+hash(d.recipe_id)*(W-88), y=64+hash(d.recipe_id*7+13)*(H-150);
     const big=hash(d.recipe_id*31)>.8;
     const el=big
       ? S('path',{d:sparkle(x,y,4.6),fill:'#efe6c8',opacity:.8,filter:'url(#glow)',class:'star'})
@@ -190,7 +196,7 @@ document.getElementById('qform').onsubmit=async e=>{
     s.el.style.transform=''; s.el.style.transition='';});
   ['st-parse','st-axes','st-excl','st-rank'].forEach(i=>stage(i));
   ['concepts','axes','excls'].forEach(i=>document.getElementById(i).innerHTML='');
-  cnt(Object.keys(stars).length,'dishes in the heavens');
+  cnt(CATALOG_N||Object.keys(stars).length,'dishes in the heavens');
   stage('st-parse','on');
   let R;
   try { R=await (await fetch('/search?q='+encodeURIComponent(qtext))).json(); }
@@ -202,17 +208,19 @@ document.getElementById('qform').onsubmit=async e=>{
   stage('st-axes','done');
   stage('st-excl','on');
   chips('excls',R.excludes.map(x=>'no '+x),'x');
-  const dead=R.excluded||[];
-  for(let i=0;i<dead.length;i++){const s=stars[dead[i].recipe_id]; if(!s)continue;
+  const deadAll=R.excluded||[];
+  // animate only RENDERED victims, capped at 120 — the counter carries the true number
+  const dead=deadAll.filter(d=>stars[d.recipe_id]).slice(0,120);
+  for(let i=0;i<dead.length;i++){const s=stars[dead[i].recipe_id];
     s.el.setAttribute('fill','var(--ember-hi)');
     if(s.el.tagName==='circle')s.el.setAttribute('r',3.2);
     if(i<6){const t=S('text',{x:s.x+7,y:s.y-7,class:'deathlab',opacity:0});t.textContent=dead[i].matched;
       t.animate([{opacity:0},{opacity:1},{opacity:0}],{duration:1700}); fin.push(t);}
-    setTimeout(((el)=>()=>{el.style.transition='opacity 1.3s';el.setAttribute('opacity',.05);})(s.el),280+i*38);
-    await sleep(38);}
+    setTimeout(((el)=>()=>{el.style.transition='opacity 1.3s';el.setAttribute('opacity',.05);})(s.el),280+i*30);
+    await sleep(30);}
   (R.components||[]).forEach(rid=>{const s=stars[rid]; if(s)s.el.setAttribute('opacity',.08);});
   await sleep(950); stage('st-excl','done');
-  cnt(Object.keys(stars).length-dead.length-(R.components||[]).length,'remain after the filters');
+  cnt((CATALOG_N||Object.keys(stars).length)-deadAll.length-(R.components||[]).length,'remain after the filters');
   stage('st-rank','on');
   Object.values(stars).forEach(s=>{if(+s.el.getAttribute('opacity')>.3)s.el.setAttribute('opacity',.2);});
   await sleep(520);

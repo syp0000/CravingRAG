@@ -234,7 +234,19 @@ sweet, comforting`.
 
 ## Weekend 5+ — scale-up (this is what makes Snowflake the reason, not the venue)
 
-Only after the 342-row comparison is measured. Then, in this order:
+**EXECUTED 2026-08-19, ahead of schedule for demo day.** Measured, not estimated:
+1k meter batch = 2.28 credits ($4.55) → projected $85 for the rest → GO. Full 20,000
+recipes (profiles + embeddings + signals) in **21 minutes, ~$90 total**, trial balance
+intact (~$250 left). evidence-or-NULL contract held at scale: 0 violations in 20k.
+Corpus: 342 curated eval rows untouched + 19,658 hash-sampled with quality gates
+(ingredients≥4, directions≥2 steps, NER≥3, ≤2 per normalized title).
+Scale findings so far: "savory noodle soup" now returns real noodle soups (embedding
+coverage improves with corpus size — the coverage half of the thesis, live); NEW failure
+class: beverages flood "refreshing" queries (Daiquiri Punch as a "dish") — the 342
+curation had no drinks, random 20k does. Recorded, not yet patched.
+The eval numbers (results_v2.md) remain 342-corpus numbers; re-judging at 20k is open.
+
+The original plan, kept for the method:
 
 1. **Meter first.** Enrich a 1k batch (signals + V1 profile + raw embed) and read the
    actual credits from `SNOWFLAKE.ACCOUNT_USAGE.CORTEX_FUNCTIONS_USAGE_HISTORY`. No
