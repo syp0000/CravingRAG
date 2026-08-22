@@ -110,7 +110,7 @@ def search(text):
         if len(ranked) == 5:
             break
 
-    # axis evidence for the finalists
+    # axis evidence + the recipe itself for the finalists
     for d in ranked:
         d["edges"] = []
         if axes:
@@ -120,6 +120,12 @@ def search(text):
                     if sig.get(axis) is not None:
                         d["edges"].append({"axis": axis, "value": float(sig[axis]), "target": target,
                                            "evidence": ev.get(axis, [])[:3]})
+        for (ing, dirs) in q("SELECT ingredients, directions FROM raw.curated_recipes WHERE recipe_id=%s", (d["recipe_id"],)):
+            try:
+                d["ingredients"] = json.loads(ing)
+                d["directions"] = json.loads(dirs)
+            except Exception:
+                d["ingredients"], d["directions"] = [], []
     return {"query": text, "concepts": concepts, "excludes": excludes,
             "axes": [{"axis": a, "target": t} for a, t in sorted(axes.items())],
             "excluded": [{"recipe_id": r, "matched": m} for r, m in excl.items()],

@@ -3,134 +3,114 @@
 <title>CravingRAG</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { --night:#050810; --night2:#0b1226; --ink:#efe9d9; --dim:#9a94a8; --gold:#d9b76a;
-          --gold-hi:#f6dfa4; --cyan:#9fd8f0; --violet:#c3b1ee; --ember:#c0392b; --ember-hi:#ff6b5e; }
+  :root { --ink:#fdf3e7; --dim:#a893c2; --cream:#ffe9c9; --blush:#ff9eb5; --violet:#c3b1ee;
+          --rose:#ff8fa3; --card:#fff6ec; --card-ink:#4a3450; --card-dim:#8f8296; }
   * { margin:0; box-sizing:border-box; }
   html,body { height:100%; }
-  body { color:var(--ink); overflow:hidden; cursor:default;
-         font:15px/1.6 "Cormorant Garamond", Georgia, serif;
-         background:
-           radial-gradient(1600px 900px at 50% 18%, #131c3d 0%, transparent 55%),
-           radial-gradient(900px 600px at 82% 75%, rgba(64,44,105,.35) 0%, transparent 60%),
-           radial-gradient(700px 500px at 12% 60%, rgba(28,52,90,.45) 0%, transparent 65%),
-           var(--night); }
-  /* milky way band */
-  body::before { content:''; position:fixed; inset:-20%; pointer-events:none; opacity:.5;
-    background: linear-gradient(115deg, transparent 38%, rgba(210,220,255,.05) 46%,
-      rgba(236,230,210,.09) 50%, rgba(210,220,255,.05) 54%, transparent 62%);
-    filter: blur(14px); }
-  /* engraved plate frame */
-  #frame { position:fixed; inset:14px; pointer-events:none; z-index:9;
-    border:1px solid rgba(217,183,106,.5); outline:1px solid rgba(217,183,106,.18);
-    outline-offset:4px; }
-  #frame i { position:absolute; width:9px; height:9px; background:var(--gold);
-    clip-path: polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%); }
-  #frame i:nth-child(1){top:-5px;left:-5px} #frame i:nth-child(2){top:-5px;right:-5px}
-  #frame i:nth-child(3){bottom:-5px;left:-5px} #frame i:nth-child(4){bottom:-5px;right:-5px}
-  #sky { position:fixed; inset:0; }
-  /* ─── hero ─── */
+  body { color:var(--ink); overflow:hidden; font:15px/1.6 Quicksand, Verdana, sans-serif;
+         background: linear-gradient(180deg,#241f3d 0%,#322a55 46%,#4a3767 74%,#6d4a72 92%,#8f5a74 100%); }
+  #clouds { position:fixed; left:0; right:0; bottom:0; height:150px; pointer-events:none; z-index:2; }
+  #sky { position:fixed; inset:0; z-index:1; }
+  /* hero */
   #hero { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
-          justify-content:center; gap:20px; transition:all .8s cubic-bezier(.4,0,.2,1); z-index:5; }
-  #hero h1 { font-family:Cinzel, "Times New Roman", serif; font-weight:600; font-size:52px;
-             letter-spacing:.14em; color:var(--gold-hi);
-             text-shadow:0 0 42px rgba(217,183,106,.4), 0 0 120px rgba(217,183,106,.18); }
-  .rule { display:flex; align-items:center; gap:14px; color:var(--gold); margin-top:-6px; }
-  .rule::before,.rule::after { content:''; height:1px; width:110px;
-    background:linear-gradient(90deg,transparent,var(--gold)); }
-  .rule::after { background:linear-gradient(90deg,var(--gold),transparent); }
-  #hero p.tag { font-style:italic; font-size:19px; color:var(--dim); letter-spacing:.04em; }
-  #qform { display:flex; gap:0; margin-top:8px; }
-  #qbox { width:min(560px,78vw); background:rgba(9,13,30,.82); color:var(--ink);
-          border:1px solid rgba(217,183,106,.55); border-right:none; border-radius:2px 0 0 2px;
-          padding:15px 22px; font:italic 500 19px/1.4 "Cormorant Garamond", Georgia, serif;
-          letter-spacing:.03em; outline:none; transition:.3s; }
-  #qbox::placeholder { color:#5d5a70; }
-  #qbox:focus { border-color:var(--gold-hi); box-shadow:0 0 34px rgba(217,183,106,.22); }
-  button { background:linear-gradient(180deg,#e8cd8b,#c9a254); color:#241a06; border:none;
-           border-radius:0 2px 2px 0; padding:0 30px; cursor:pointer;
-           font:600 14px/1 Cinzel, serif; letter-spacing:.18em; }
-  button:disabled { opacity:.45; cursor:wait; }
+          justify-content:center; gap:16px; transition:all .8s cubic-bezier(.4,0,.2,1); z-index:5; }
+  #hero h1 { font-family:Fredoka, Verdana, sans-serif; font-weight:600; font-size:52px;
+             letter-spacing:.5px; color:var(--ink); text-shadow:0 0 40px rgba(255,233,201,.3); }
+  #hero p.tag { font-size:19px; color:#d9c8e8; font-weight:500; margin-top:-6px; }
+  #qform { display:flex; gap:12px; margin-top:10px; align-items:stretch; }
+  #qbox { width:min(560px,76vw); background:var(--card); color:#5c4a63;
+          border:none; border-radius:999px; padding:16px 26px;
+          font:500 18px/1.4 Quicksand, Verdana, sans-serif; outline:none;
+          box-shadow:0 8px 30px rgba(20,12,40,.35); transition:.3s; }
+  #qbox::placeholder { color:#b3a5bd; }
+  #qbox:focus { box-shadow:0 8px 34px rgba(255,158,181,.35); }
+  button { background:var(--blush); color:#4a2438; border:none; border-radius:999px; padding:0 28px;
+           cursor:pointer; font:600 18px/1 Fredoka, Verdana, sans-serif;
+           box-shadow:0 8px 24px rgba(255,158,181,.4); }
+  button:disabled { opacity:.5; cursor:wait; }
+  #hero .sub { font-size:13.5px; color:var(--dim); }
   #hero.docked { inset:auto 0 auto 0; top:0; flex-direction:row; justify-content:center;
-    padding:16px 24px 14px; gap:22px;
-    background:linear-gradient(180deg,rgba(5,8,16,.94) 60%,transparent); }
-  #hero.docked h1 { font-size:21px; text-shadow:0 0 18px rgba(217,183,106,.35); }
-  #hero.docked .rule, #hero.docked p.tag { display:none; }
-  #hero.docked #qbox { padding:9px 16px; font-size:16px; width:min(430px,46vw); }
-  #hero.docked button { padding:0 20px; font-size:12px; }
-  /* ─── pipeline ─── */
-  #pipe { position:fixed; top:66px; left:34px; right:34px; z-index:4; display:none;
-          align-items:center; justify-content:center; gap:9px; flex-wrap:wrap; }
-  .stage { font:600 10.5px/1 Cinzel, serif; letter-spacing:.16em; text-transform:uppercase;
-           color:#6d6880; padding:6px 13px; border:1px solid #26304f; border-radius:2px;
-           opacity:.4; transition:.45s; }
-  .stage.on { opacity:1; color:var(--gold-hi); border-color:rgba(217,183,106,.6);
-              box-shadow:0 0 18px rgba(217,183,106,.12); }
-  .stage.done { opacity:.85; color:var(--cyan); border-color:#2c4a5e; box-shadow:none; }
-  .chip { font:italic 500 14.5px/1 "Cormorant Garamond", serif; letter-spacing:.03em;
-          border-radius:2px; padding:6px 12px; opacity:0; transition:.5s; }
+    padding:14px 24px 12px; gap:16px;
+    background:linear-gradient(180deg,rgba(30,24,54,.95) 60%,transparent); }
+  #hero.docked h1 { font-size:22px; text-shadow:none; }
+  #hero.docked p.tag, #hero.docked .sub { display:none; }
+  #hero.docked #qbox { padding:9px 18px; font-size:15px; width:min(420px,44vw); box-shadow:none; }
+  #hero.docked button { padding:0 20px; font-size:14px; box-shadow:none; }
+  /* pipeline */
+  #pipe { position:fixed; top:62px; left:24px; right:24px; z-index:4; display:none;
+          align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
+  .stage { font:600 12.5px/1 Quicksand, Verdana, sans-serif; color:#8d80a8; padding:6px 14px;
+           border-radius:999px; background:rgba(255,246,236,.07); opacity:.45; transition:.45s; }
+  .stage.on { opacity:1; color:#c9ecd9; background:rgba(201,236,217,.13); }
+  .stage.done { opacity:.85; color:var(--cream); background:rgba(255,233,201,.1); }
+  .chip { font:600 13.5px/1 Quicksand, Verdana, sans-serif; border-radius:999px; padding:6px 13px;
+          opacity:0; transition:.5s; }
   .chip.show { opacity:1; }
-  .chip.c { border:1px solid rgba(195,177,238,.45); color:var(--violet); }
-  .chip.a { border:1px solid rgba(159,216,240,.4); color:var(--cyan); }
-  .chip.x { border:1px solid rgba(192,57,43,.6); color:var(--ember-hi); }
-  #count { position:fixed; right:40px; top:118px; z-index:4; text-align:right; display:none; }
-  #count b { font-family:Cinzel, serif; font-weight:600; color:var(--gold-hi); font-size:30px;
-             display:block; text-shadow:0 0 22px rgba(217,183,106,.3); }
-  #count span { font-style:italic; font-size:14px; color:var(--dim); }
-  /* ─── evidence card ─── */
-  #card { position:fixed; right:14px; top:150px; bottom:14px; width:352px; padding:24px 26px;
-          z-index:4; overflow:auto; display:none;
-          background:linear-gradient(90deg,transparent,rgba(5,8,16,.93) 14%);
-          border-left:1px solid rgba(217,183,106,.25); }
-  #card h2 { font-family:Cinzel, serif; font-weight:600; font-size:17px; letter-spacing:.06em;
-             color:var(--gold-hi); }
-  #card .rk { font-style:italic; color:var(--dim); font-size:14px; margin:2px 0 6px; }
-  #card .hr { height:1px; margin:10px 0 14px;
-    background:linear-gradient(90deg,var(--gold),transparent); position:relative; }
-  #card .hr::before { content:'✦'; position:absolute; left:-2px; top:-9px; color:var(--gold);
-    font-size:10px; background:transparent; }
-  .ax { margin:13px 0; }
-  .ax .nm { display:flex; justify-content:space-between; align-items:baseline; }
-  .ax .nm .n { font:600 11px/1 Cinzel, serif; letter-spacing:.18em; text-transform:uppercase;
-               color:var(--cyan); }
-  .ax .nm .v { font-style:italic; font-size:13.5px; color:var(--dim); }
-  .ax .meter { height:3px; background:#1a2340; margin:6px 0 7px; position:relative; }
-  .ax .meter i { position:absolute; height:100%; background:linear-gradient(90deg,#3f6f8a,var(--cyan)); }
-  .ax .meter b { position:absolute; top:-4px; width:1px; height:11px; background:var(--gold); }
-  .ev { font-style:italic; font-size:14.5px; color:#b9b2c4; padding-left:12px; margin:4px 0;
-        border-left:1px solid rgba(217,183,106,.35); }
-  .vecnote { font-style:italic; font-size:14.5px; color:var(--gold); }
-  #err { position:fixed; bottom:26px; left:36px; color:var(--ember-hi); z-index:6;
-         font-style:italic; }
-  /* ─── svg text ─── */
-  .dishlab { fill:var(--ink); font:500 15px "Cormorant Garamond", Georgia, serif;
-             letter-spacing:.04em; cursor:pointer; }
-  .dishnum { fill:var(--gold); font:600 12px Cinzel, serif; letter-spacing:.1em; cursor:pointer; }
-  .deathlab { fill:var(--ember-hi); font:italic 12px "Cormorant Garamond", serif; }
+  .chip.c { background:rgba(195,177,238,.18); color:#d9c8f5; }
+  .chip.a { background:rgba(159,216,240,.14); color:#b8def0; }
+  .chip.x { background:rgba(255,158,181,.2); color:#ffb8c9; }
+  #count { position:fixed; right:32px; top:112px; z-index:4; text-align:right; display:none; }
+  #count b { font-family:Fredoka, Verdana, sans-serif; font-weight:600; color:var(--cream);
+             font-size:28px; display:block; }
+  #count span { font-size:13.5px; color:var(--dim); font-weight:500; }
+  /* recipe card */
+  #card { position:fixed; right:20px; top:140px; bottom:20px; width:360px; z-index:4;
+          overflow:auto; display:none; background:var(--card); border-radius:24px;
+          padding:24px 26px; box-shadow:0 14px 44px rgba(18,12,38,.45); color:var(--card-ink); }
+  #card::-webkit-scrollbar { width:8px; } #card::-webkit-scrollbar-thumb { background:#e8d9cf; border-radius:4px; }
+  #card h2 { font-family:Fredoka, Verdana, sans-serif; font-weight:600; font-size:20px; }
+  #card .rk { font-size:13px; color:var(--card-dim); font-weight:500; margin:2px 0 10px; }
+  #card .sect { font:600 12px/1 Quicksand, Verdana, sans-serif; letter-spacing:.12em;
+                text-transform:uppercase; color:#b08aa5; margin:16px 0 8px;
+                border-top:2px dashed #e8d9cf; padding-top:14px; }
+  #card .sect:first-of-type { border-top:none; padding-top:0; }
+  .ax { margin:10px 0; }
+  .ax .nm { display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:#7a5c8f; }
+  .ax .meter { height:9px; border-radius:999px; background:#efe3dc; margin:5px 0 5px; position:relative; }
+  .ax .meter i { position:absolute; left:0; top:0; bottom:0; border-radius:999px;
+                 background:linear-gradient(90deg,var(--violet),var(--blush)); }
+  .ax .meter b { position:absolute; top:-3px; width:2px; height:15px; background:#ffb85c; border-radius:2px; }
+  .ev { font-size:13px; color:#7d7086; font-style:italic; padding-left:10px;
+        border-left:3px solid #f0dfe6; border-radius:2px; margin:3px 0; }
+  .ing { display:flex; flex-wrap:wrap; gap:6px; }
+  .ing span { background:#f5e8f0; color:#6e5170; border-radius:999px; padding:5px 12px;
+              font-size:12.5px; font-weight:600; }
+  .step { display:flex; gap:10px; margin:8px 0; font-size:13.5px; color:#5f5368; font-weight:500; }
+  .step b { flex:none; width:22px; height:22px; border-radius:50%; background:var(--blush);
+            color:#4a2438; font:600 12px/22px Fredoka, Verdana, sans-serif; text-align:center; }
+  .vecnote { font-size:13.5px; color:#b08aa5; font-weight:600; }
+  .foot { font-size:12.5px; color:#9a8ba4; font-weight:500; margin-top:14px;
+          border-top:2px dashed #e8d9cf; padding-top:12px; }
+  #err { position:fixed; bottom:24px; left:28px; color:var(--rose); z-index:6; font-weight:600; }
+  .dishlab { fill:var(--ink); font:500 15px Fredoka, Verdana, sans-serif; cursor:pointer; }
+  .dishnum { fill:var(--cream); font:600 13px Fredoka, Verdana, sans-serif; cursor:pointer; }
+  .deathlab { fill:#ffb8c9; font:600 12px Quicksand, Verdana, sans-serif; }
   @media (max-width:900px){
-    #hero h1 { font-size:34px; }
-    #card { top:auto; bottom:0; left:0; right:0; width:auto; max-height:40vh; border-left:none;
-      border-top:1px solid rgba(217,183,106,.25);
-      background:linear-gradient(180deg,transparent,rgba(5,8,16,.95) 20%); } }
+    #hero h1 { font-size:36px; }
+    #card { top:auto; bottom:0; left:0; right:0; width:auto; max-height:44vh; border-radius:24px 24px 0 0; } }
 </style></head><body>
-<div id="frame"><i></i><i></i><i></i><i></i></div>
+<svg id="clouds" viewBox="0 0 1280 150" preserveAspectRatio="none">
+  <path d="M0 90 Q 80 40 180 78 Q 260 20 360 66 Q 470 30 560 74 Q 660 26 760 70 Q 860 34 960 76 Q 1060 30 1160 68 Q 1230 44 1280 80 L 1280 150 L 0 150 Z" fill="#1c1733" opacity="0.9"></path>
+  <path d="M0 118 Q 120 84 240 108 Q 380 78 520 106 Q 660 80 800 108 Q 940 82 1080 106 Q 1200 86 1280 110 L 1280 150 L 0 150 Z" fill="#141026"></path>
+</svg>
 <svg id="sky"></svg>
 <div id="hero">
-  <h1>CRAVINGRAG</h1>
-  <div class="rule">✦</div>
-  <p class="tag">every dish is a star — tell the heavens what you crave</p>
+  <h1>CravingRAG</h1>
+  <p class="tag">every dish is a little star — tell the sky what you're craving</p>
   <form id="qform"><input id="qbox" placeholder="a warm spicy soup, no shellfish…" autocomplete="off">
-  <button id="go">SEEK</button></form>
+  <button id="go">find it</button></form>
+  <div class="sub">20,000 real recipes · every match shows its evidence</div>
 </div>
 <div id="pipe">
-  <span class="stage" id="st-parse">Parse</span>
+  <span class="stage" id="st-parse">understanding</span>
   <span id="concepts"></span>
-  <span class="stage" id="st-axes">Axes</span>
+  <span class="stage" id="st-axes">mapping</span>
   <span id="axes"></span>
-  <span class="stage" id="st-excl">Exclusion</span>
+  <span class="stage" id="st-excl">tucking away</span>
   <span id="excls"></span>
-  <span class="stage" id="st-rank">Rank</span>
+  <span class="stage" id="st-rank">picking five</span>
 </div>
 <div id="count"><b id="cnum"></b><span id="clab"></span></div>
 <div id="card"></div>
@@ -142,36 +122,35 @@ let W=innerWidth, H=innerHeight;
 svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
 svg.innerHTML=`<defs>
   <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
-    <feGaussianBlur stdDeviation="3.2" result="b"/>
+    <feGaussianBlur stdDeviation="3" result="b"/>
     <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
   <filter id="bigglow" x="-120%" y="-120%" width="340%" height="340%">
-    <feGaussianBlur stdDeviation="7" result="b"/>
+    <feGaussianBlur stdDeviation="6" result="b"/>
     <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 </defs>`;
 const stars={};
 function S(tag,attrs,parent){const el=document.createElementNS(NS,tag);
   for(const k in attrs)el.setAttribute(k,attrs[k]);(parent||svg).appendChild(el);return el;}
 function hash(n){ n=(n^61)^(n>>>16); n=n+(n<<3); n=n^(n>>>4); n=n*0x27d4eb2d; n=n^(n>>>15); return (n>>>0)/4294967295; }
-// four-point "atlas" star: concave diamond
-function sparkle(x,y,r,q){q=q||.22;return `M${x},${y-r} Q${x+r*q},${y-r*q} ${x+r},${y} Q${x+r*q},${y+r*q} ${x},${y+r} Q${x-r*q},${y+r*q} ${x-r},${y} Q${x-r*q},${y-r*q} ${x},${y-r} Z`;}
-// dust — ivory-tinted, a few gold
-for(let i=0;i<170;i++){const g=Math.random()<.12;
-  const c=S('circle',{cx:Math.random()*W,cy:Math.random()*H,r:Math.random()*.9+.2,
-    fill:g?'#d9b76a':'#e9e4d4',opacity:(Math.random()*.3+.05).toFixed(2)});
-  c.innerHTML=`<animate attributeName="opacity" values="${c.getAttribute('opacity')};.02;${c.getAttribute('opacity')}" dur="${(3+Math.random()*6).toFixed(1)}s" repeatCount="indefinite"/>`;}
+// plump four-point star (rounded concave diamond, Twilight Picnic style)
+function plump(x,y,r){const q=r*0.30;
+  return `M${x},${y-r} C${x+q},${y-q} ${x+q},${y-q} ${x+r},${y} C${x+q},${y+q} ${x+q},${y+q} ${x},${y+r} C${x-q},${y+q} ${x-q},${y+q} ${x-r},${y} C${x-q},${y-q} ${x-q},${y-q} ${x},${y-r} Z`;}
+// dust
+for(let i=0;i<150;i++){const pinky=Math.random()<.3;
+  const c=S('circle',{cx:Math.random()*W,cy:Math.random()*H,r:Math.random()*1.1+.3,
+    fill:pinky?'#ffd9e2':'#ffe9c9',opacity:(Math.random()*.35+.08).toFixed(2)});
+  c.innerHTML=`<animate attributeName="opacity" values="${c.getAttribute('opacity')};.03;${c.getAttribute('opacity')}" dur="${(3+Math.random()*6).toFixed(1)}s" repeatCount="indefinite"/>`;}
 let CATALOG_N=0;
 fetch('/catalog').then(r=>r.json()).then(cat=>{
   CATALOG_N=cat.length;
-  // the sky RENDERS a deterministic ~800-star sample; ranking and the counters always
-  // use the full catalog server-side (20k SMIL animations would melt the browser)
   const p=Math.min(1, 800/cat.length);
   cat.forEach(d=>{ if(hash(d.recipe_id*17+5)>p) return;
-    const x=44+hash(d.recipe_id)*(W-88), y=64+hash(d.recipe_id*7+13)*(H-150);
-    const big=hash(d.recipe_id*31)>.8;
+    const x=44+hash(d.recipe_id)*(W-88), y=60+hash(d.recipe_id*7+13)*(H-210);
+    const big=hash(d.recipe_id*31)>.82;
     const el=big
-      ? S('path',{d:sparkle(x,y,4.6),fill:'#efe6c8',opacity:.8,filter:'url(#glow)',class:'star'})
-      : S('circle',{cx:x,cy:y,r:1.8,fill:'#e6dfc9',opacity:.72,class:'star'});
-    el.innerHTML=`<animate attributeName="opacity" values=".8;.3;.8" dur="${(2.5+hash(d.recipe_id*3)*5).toFixed(1)}s" repeatCount="indefinite"/>`;
+      ? S('path',{d:plump(x,y,5),fill:hash(d.recipe_id*13)>.5?'#ffe9c9':'#ffd9e2',opacity:.85,filter:'url(#glow)',class:'star'})
+      : S('circle',{cx:x,cy:y,r:1.9,fill:'#fff3da',opacity:.75,class:'star'});
+    el.innerHTML=`<animate attributeName="opacity" values=".85;.35;.85" dur="${(2.5+hash(d.recipe_id*3)*5).toFixed(1)}s" repeatCount="indefinite"/>`;
     stars[d.recipe_id]={el,x,y,title:d.title};});
 }).catch(e=>err('catalog: '+e));
 function err(m){document.getElementById('err').textContent=m;}
@@ -180,7 +159,6 @@ function stage(id,cls){const el=document.getElementById(id);el.classList.remove(
 function chips(id,items,cls){const box=document.getElementById(id);box.innerHTML='';
   items.forEach((t,i)=>{const s=document.createElement('span');s.className='chip '+cls;s.textContent=t;
     box.appendChild(s);setTimeout(()=>s.classList.add('show'),i*170);});}
-const ROMAN=['I','II','III','IV','V'];
 let busy=false, fin=[];
 document.getElementById('qform').onsubmit=async e=>{
   e.preventDefault(); if(busy)return;
@@ -191,16 +169,16 @@ document.getElementById('qform').onsubmit=async e=>{
   document.getElementById('card').style.display='none';
   document.getElementById('count').style.display='block';
   fin.forEach(l=>l.remove()); fin=[];
-  Object.values(stars).forEach(s=>{s.el.setAttribute('opacity',.72);
-    s.el.setAttribute('fill', s.el.tagName==='path'?'#efe6c8':'#e6dfc9');
+  Object.values(stars).forEach(s=>{s.el.setAttribute('opacity',.8);
+    if(s.el.tagName==='circle')s.el.setAttribute('fill','#fff3da');
     s.el.style.transform=''; s.el.style.transition='';});
   ['st-parse','st-axes','st-excl','st-rank'].forEach(i=>stage(i));
   ['concepts','axes','excls'].forEach(i=>document.getElementById(i).innerHTML='');
-  cnt(CATALOG_N||Object.keys(stars).length,'dishes in the heavens');
+  cnt(CATALOG_N||Object.keys(stars).length,'little dishes in the sky');
   stage('st-parse','on');
   let R;
   try { R=await (await fetch('/search?q='+encodeURIComponent(qtext))).json(); }
-  catch(ex){ err('the oracle is silent — is ui/server.py running?'); busy=false; document.getElementById('go').disabled=false; return; }
+  catch(ex){ err('the sky is quiet — is ui/server.py running?'); busy=false; document.getElementById('go').disabled=false; return; }
   if(R.error){ err(R.error); busy=false; document.getElementById('go').disabled=false; return; }
   stage('st-parse','done'); chips('concepts',R.concepts,'c'); await sleep(R.concepts.length*170+380);
   stage('st-axes','on');
@@ -209,61 +187,66 @@ document.getElementById('qform').onsubmit=async e=>{
   stage('st-excl','on');
   chips('excls',R.excludes.map(x=>'no '+x),'x');
   const deadAll=R.excluded||[];
-  // animate only RENDERED victims, capped at 120 — the counter carries the true number
   const dead=deadAll.filter(d=>stars[d.recipe_id]).slice(0,120);
   for(let i=0;i<dead.length;i++){const s=stars[dead[i].recipe_id];
-    s.el.setAttribute('fill','var(--ember-hi)');
+    s.el.setAttribute('fill','var(--rose)');
     if(s.el.tagName==='circle')s.el.setAttribute('r',3.2);
-    if(i<6){const t=S('text',{x:s.x+7,y:s.y-7,class:'deathlab',opacity:0});t.textContent=dead[i].matched;
+    if(i<6){const t=S('text',{x:s.x+8,y:s.y-8,class:'deathlab',opacity:0});
+      t.textContent=dead[i].matched+' — not tonight';
       t.animate([{opacity:0},{opacity:1},{opacity:0}],{duration:1700}); fin.push(t);}
-    setTimeout(((el)=>()=>{el.style.transition='opacity 1.3s';el.setAttribute('opacity',.05);})(s.el),280+i*30);
+    setTimeout(((el)=>()=>{el.style.transition='opacity 1.3s';el.setAttribute('opacity',.06);})(s.el),280+i*30);
     await sleep(30);}
   (R.components||[]).forEach(rid=>{const s=stars[rid]; if(s)s.el.setAttribute('opacity',.08);});
   await sleep(950); stage('st-excl','done');
-  cnt((CATALOG_N||Object.keys(stars).length)-deadAll.length-(R.components||[]).length,'remain after the filters');
+  cnt((CATALOG_N||Object.keys(stars).length)-deadAll.length-(R.components||[]).length,'still twinkling for you');
   stage('st-rank','on');
-  Object.values(stars).forEach(s=>{if(+s.el.getAttribute('opacity')>.3)s.el.setAttribute('opacity',.2);});
+  Object.values(stars).forEach(s=>{if(+s.el.getAttribute('opacity')>.3)s.el.setAttribute('opacity',.22);});
   await sleep(520);
-  const cardW = W>900 ? 352 : 0;
-  const cx=(W-cardW)*0.52, cy=H*0.55, RR=Math.min(W-cardW,H)*0.28;
-  // real constellations are irregular open chains, not polygons: walk I→V with
-  // seeded jitter on angle and radius so every query draws a different figure
+  const cardW = W>900 ? 380 : 0;
+  const cx=(W-cardW)*0.52, cy=H*0.53, RR=Math.min(W-cardW,H)*0.27;
   const seed=R.top.reduce((s,d)=>s+d.recipe_id,0);
   const jit=(k,lo,hi)=>lo+(hi-lo)*hash(seed*13+k*7);
   const pos=R.top.map((d,i)=>{const a=-Math.PI/2 + i*(Math.PI*2/5) + (jit(i,-1,1))*0.55;
     const r=RR*jit(i+9,0.55,1.15);
     return [cx+r*Math.cos(a), cy+r*Math.sin(a)];});
   for(let i=0;i<R.top.length-1;i++){const [x1,y1]=pos[i],[x2,y2]=pos[i+1];
-    const l=S('line',{x1,y1,x2,y2,stroke:'var(--gold)',opacity:0,'stroke-width':.8});
-    l.animate([{opacity:0},{opacity:.5}],{duration:950,delay:950+i*160,fill:'forwards'}); fin.push(l);}
+    const l=S('line',{x1,y1,x2,y2,stroke:'#ffd9a0',opacity:0,'stroke-width':2,
+      'stroke-dasharray':'1 8','stroke-linecap':'round'});
+    l.animate([{opacity:0},{opacity:.55}],{duration:950,delay:950+i*160,fill:'forwards'}); fin.push(l);}
   R.top.forEach((d,i)=>{const s=stars[d.recipe_id]; const [tx,ty]=pos[i];
     if(s){ s.el.style.transition='transform 1.15s cubic-bezier(.3,0,.2,1), opacity 1s';
       s.el.style.transform=`translate(${tx-s.x}px,${ty-s.y}px)`; s.el.setAttribute('opacity',0);}
-    const halo=S('circle',{cx:tx,cy:ty,r:16-i*1.4,fill:'none',stroke:'rgba(217,183,106,.35)',
-      'stroke-width':.7,opacity:0});
-    halo.animate([{opacity:0},{opacity:1}],{duration:800,delay:850+i*150,fill:'forwards'});
-    const st=S('path',{d:sparkle(tx,ty,13-i*1.5),fill:'#fdf6e3',opacity:0,filter:'url(#bigglow)'});
+    const st=S('path',{d:plump(tx,ty,15-i*1.6),fill:i%2?'#ffe9c9':'#fff6ec',opacity:0,filter:'url(#bigglow)'});
     st.animate([{opacity:0},{opacity:1}],{duration:750,delay:820+i*150,fill:'forwards'});
-    const num=S('text',{x:tx+22,y:ty-4,class:'dishnum',opacity:0}); num.textContent=ROMAN[i];
-    const t=S('text',{x:tx+22,y:ty+13,class:'dishlab',opacity:0});
-    t.textContent=d.title.length>30?d.title.slice(0,29)+'…':d.title;
+    const num=S('text',{x:tx+22,y:ty-3,class:'dishnum',opacity:0}); num.textContent=(i+1)+' ·';
+    const t=S('text',{x:tx+44,y:ty-3,class:'dishlab',opacity:0});
+    t.textContent=d.title.length>28?d.title.slice(0,27)+'…':d.title;
     [num,t].forEach(el=>el.animate([{opacity:0},{opacity:1}],{duration:750,delay:1000+i*150,fill:'forwards'}));
     st.onmouseenter=t.onmouseenter=num.onmouseenter=()=>showCard(R,d,i);
-    fin.push(halo,st,num,t);});
+    st.onclick=t.onclick=num.onclick=()=>showCard(R,d,i);
+    fin.push(st,num,t);});
   await sleep(1500); stage('st-rank','done');
-  cnt(R.top.length,'written into the sky'); showCard(R,R.top[0],0);
+  cnt(R.top.length,'picked just for you'); showCard(R,R.top[0],0);
   busy=false; document.getElementById('go').disabled=false;
 };
 function cnt(n,lab){document.getElementById('cnum').textContent=n;
   document.getElementById('clab').textContent=lab;}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 function showCard(R,d,i){const card=document.getElementById('card');card.style.display='block';
-  let h=`<h2>${ROMAN[i]} · ${d.title}</h2>
-    <div class="rk">similarity ${d.sim} — “${R.query}”</div><div class="hr"></div>`;
-  if(!d.edges.length) h+=`<div class="vecnote">No sensory axis speaks for this craving — it is
-    ranked by the profile vector alone, and says so.</div>`;
-  d.edges.forEach(e=>{h+=`<div class="ax"><div class="nm"><span class="n">${e.axis}</span>
-    <span class="v">${e.value} against ${e.target}</span></div>
+  let h=`<h2>${i+1} · ${esc(d.title)}</h2>
+    <div class="rk">match ${d.sim} — “${esc(R.query)}”</div>`;
+  h+=`<div class="sect">why it matched</div>`;
+  if(!d.edges.length) h+=`<div class="vecnote">no sensory axis speaks for this craving — matched by overall profile similarity, and honest about it</div>`;
+  d.edges.forEach(e=>{h+=`<div class="ax"><div class="nm"><span>${e.axis}</span><span>${e.value} of ${e.target}</span></div>
     <div class="meter"><i style="width:${e.value*100}%"></i><b style="left:${e.target*100}%"></b></div>`;
-    e.evidence.forEach(ev=>h+=`<div class="ev">“${ev}”</div>`); h+=`</div>`;});
-  card.innerHTML=h;}
+    e.evidence.forEach(ev=>h+=`<div class="ev">“${esc(ev)}”</div>`); h+=`</div>`;});
+  if(d.ingredients && d.ingredients.length){
+    h+=`<div class="sect">ingredients</div><div class="ing">`;
+    d.ingredients.forEach(x=>h+=`<span>${esc(x)}</span>`); h+=`</div>`;}
+  if(d.directions && d.directions.length){
+    h+=`<div class="sect">how to make it</div>`;
+    d.directions.forEach((x,j)=>h+=`<div class="step"><b>${j+1}</b><div>${esc(x)}</div></div>`);}
+  if(R.excludes.length && (R.excluded||[]).length)
+    h+=`<div class="foot">${R.excluded.length} dishes with ${R.excludes.join(', ')} were tucked away for you tonight</div>`;
+  card.innerHTML=h; card.scrollTop=0;}
 </script></body></html>
