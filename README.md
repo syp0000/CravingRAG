@@ -1,199 +1,177 @@
 # CravingRAG
 
-**Describe a craving in plain language. Get real recipes back, with reasons.**
+**Describe a craving in plain language. Get real dishes back — with the evidence for why.**
 
-> "something refreshing and juicy" -> dishes that match the sensory intent, not just a
-> keyword.
+> *"warm spicy soup, no shellfish"* → the sky of 20,000 recipes narrows to five, and every
+> match shows the exact ingredient lines that earned it.
 
-CravingRAG is a Snowflake-native RAG project for recipe search. The project exists to test a
-specific retrieval idea: food cravings are usually sensory or situational, so recipe search
-gets better when recipes are rewritten into retrievable sensory representations before they
-are embedded.
+CravingRAG is a **retrieval study with an explanation layer**, built Snowflake-native. It
+started with a question left over from a previous project (PantryAI): an LLM can *generate*
+a recipe that satisfies every requested ingredient and still feel implausible — so instead
+of asking AI to invent food, can we *retrieve* real recipes that match what someone feels
+like eating? Answering that honestly turned out to mean measuring how representation, query
+semantics, and constraints fail in semantic retrieval — and building controlled fixes.
 
-## Current Status
+One sensory data model feeds two experiences:
 
-**V2 rebuild in progress.** The baseline is complete and measured; the current work is the
-structured-signals retriever described in [PLAN.md](PLAN.md).
+```
+                    Sensory data model
+        (Cortex-extracted axes + evidence, per recipe)
+                           │
+            ┌──────────────┴──────────────┐
+            ▼                             ▼
+     Consumer experience            Business intelligence
+   "what should I eat?"          "what does our catalog offer?"
+   constellation UI, live         semantic view + Cortex Analyst
+```
 
-| Milestone | Status | Evidence |
-|---|---:|---|
-| Curated RecipeNLG corpus | Done | `data/curation_list.csv` -> local `data/curated.csv` |
-| V1 enriched-vector baseline | Done | `sql/06_v1_baseline.sql` |
-| Baseline evaluation | Done | [eval/results_baseline.md](eval/results_baseline.md) |
-| V2 structured recipe signals | In progress | `sql/08_v2_signals.sql` |
-| V2 query parser + sensory wiki | In progress | `sql/09_query_parser.sql`, `wiki/`, `pipelines/compile_wiki.py` |
-| V2 retrieval + comparison | Next | W3 in [PLAN.md](PLAN.md) |
-| Constellation UI | Later | W4 in [PLAN.md](PLAN.md) |
+## The result (measured, not claimed)
 
-Baseline result, frozen on 2026-07-31:
+Four retrieval arms, one blinded human-judged pool (386 judgments over the union of every
+arm's top-10; one ideal ranking per query shared by all arms). 15 frozen queries,
+342-recipe curated corpus. Full readout: [eval/results_v2.md](eval/results_v2.md).
 
-| Arm | NDCG@5 | Recall@5 |
+| arm | NDCG@5 | P@5 |
 |---|---:|---:|
-| V1 enriched vector | 0.797 | 0.843 |
+| raw recipe text → embedding (control) | 0.582 | 0.560 |
+| structured 8-axis scoring | 0.698 | 0.747 |
+| LLM sensory profile → embedding | 0.732 | 0.773 |
+| **profile embedding + hard exclusion** | **0.844** | **0.880** |
 
-The important baseline weakness is exclusion: **NDCG@5 = 0.504** for queries like
-`spicy dish without peanuts`. V2 is designed to move that number with hard ingredient
-exclusion plus structured sensory scoring.
+Each gap measures one thing:
 
-## What Changed From V1 To V2
+- **Enrichment works** (+0.150): raw text ranks by word overlap — five almond desserts for
+  *"without almonds"*. Rewriting recipes into sensory profiles before embedding is the
+  project's original claim, finally measured against a control.
+- **Hard exclusion is the biggest lever** (+0.112 overall; exclusion-query NDCG 0.245 →
+  0.855): embeddings cannot subtract, an anti-join can.
+- **Structured axis scoring loses the ranking war and wins its real jobs.** It collapses
+  when a query's key noun has no axis (*"savory NOODLE soup"* 0.07 — the axes express
+  intensity, not identity), but it powers the exclusion's evidence and the entire
+  explanation layer. *Precision from structure, coverage from embeddings* — with numbers.
 
-V1 embeds one generated text profile per recipe:
+The judging produced its own findings — including the machine auditing the human (7 human
+grades violated their query's exclusion and were overridden to 0 with provenance), and a
+`"finely chopped nuts"` baklava judged 0 for *"without almonds"* because unverifiable
+absence fails closed. See [eval/results_v2.md](eval/results_v2.md) §Findings.
 
-```text
-recipe -> sensory text profile -> AI_EMBED -> cosine search
+## Scale
+
+The measured pipeline then ran at scale, meter-first: a 1k batch read **$4.55** from
+`ACCOUNT_USAGE`, the projection cleared the budget gate, and **20,000 recipes were enriched
+in 21 minutes for ~$90** (profiles + embeddings + signals; the evidence-or-NULL contract
+held with 0 violations). Scale immediately taught two things: noodle-soup queries fixed
+themselves (embedding coverage grows with corpus size), and a new failure class appeared
+(beverages flooding "refreshing" — the curated 342 had no drinks; a random 19.7k does).
+Details in [PLAN.md](PLAN.md) §Weekend 5+.
+
+## Consumer side — the constellation
+
+```bash
+.venv/bin/python ui/server.py    # → http://localhost:8642
 ```
 
-V2 keeps the V1 baseline, then adds structured signals:
+Every dish is a star. Type a craving: the live pipeline parses it (Cortex call), maps
+concepts to axes through the hand-editable sensory wiki, then the hard-exclusion pass kills
+matching stars in red — each flashing the term that caught it — and the five survivors form
+a constellation with verbatim evidence in the side card (*spicy 0.8 ← "10 Thai chile
+peppers, seeded and minced"*). Ranking uses the measured winner (profile vectors +
+exclusion); the axes explain. The UI renders scored rows and invents nothing.
 
-```text
-recipe -> {spicy, warm, brothy, ...} + evidence
-query  -> concepts + exclusions -> sensory wiki -> target axes
-       -> hard exclusion filter -> attribute scoring
-```
+`ui/constellation_static.html` is the offline fallback (the 15 eval queries, no server).
 
-The sensory wiki is the project’s small hand-editable definition layer. It maps craving
-concepts such as `refreshing`, `cozy`, and `indulgent` onto fixed axes such as `fresh`,
-`warm`, `rich`, and `comforting`. This keeps the meaning of a craving in one place instead
-of burying it in a prompt.
+## Business side — the same axes as dimensions
 
-Read [DESIGN.md](DESIGN.md) for the original retrieval rationale and [DECISIONS.md](DECISIONS.md)
-for the V2 data-model tradeoffs.
+The extraction that powers search is also a semantic layer
+([sql/14_semantic_view.sql](sql/14_semantic_view.sql)): a Snowflake **semantic view** over
+the axis columns, with synonyms and metrics, so **Cortex Analyst** turns a product
+question into SQL nobody writes:
+
+> *"How many dishes satisfy fresh + spicy?"* → **230 of 19,260 (1.2%)** — while warm/savory
+> comfort food is half the catalog. The underserved-combination finding is one
+> natural-language question away.
+
+More catalog findings (all real data, no behavioral data invented):
+[sql/13_catalog_insights.sql](sql/13_catalog_insights.sql) — the catalog skews hard to
+comfort food (warm 70%, spicy 6%), and a dairy-free customer loses **63%** of it.
+
+## Honest limits (deliberately deferred, tracked in [PLAN.md](PLAN.md) §v3)
+
+Single annotator (test-retest κw 0.624 on 29 re-judged pairs); 15 dev-set queries written
+with answers in mind — an acceptance suite, not a neutral benchmark; V1→V2 is not a full
+ablation (the raw-text control and exclusion on/off are); eval numbers are 342-corpus
+measurements, not yet re-judged at 20k. An LLM judge (llama, different family than the
+enricher) was designed, validated against human grades, and **rejected** — not for its
+agreement number but for the direction of its errors (systematic over-exclusion).
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    CSV["RecipeNLG CSV<br/>local, not committed"]
-    CURATE["pipelines/curate.py<br/>curated 300-400 row corpus"]
-    RAW[("RAW.CURATED_RECIPES")]
-    V1[("V1.RECIPE_PROFILES<br/>sensory text + embedding")]
-    WIKI["wiki/*.md<br/>concept -> axis weights"]
+    CSV["RecipeNLG CSV · 2.23M<br/>local, never committed"]
+    CURATE["pipelines/curate.py + scale_corpus.py<br/>342 curated + 19,658 sampled"]
+    RAW[("RAW.CURATED_RECIPES · 20k")]
+    V1[("V1.RECIPE_PROFILES<br/>sensory text + vector")]
+    SIG[("V2.RECIPE_SIGNALS<br/>8 axes + evidence, NULL without evidence")]
+    WIKI["wiki/*.md (Obsidian)<br/>concept → axis weights"]
     SW[("V2.SENSORY_WIKI")]
-    SIG[("V2.RECIPE_SIGNALS<br/>signals + evidence VARIANT")]
-    PARSE[("EVAL2.PARSES<br/>frozen query parses")]
-    SCORE["W3 retrieval<br/>exclusion filter + axis scoring"]
-    EVAL["eval/results_v2.md<br/>baseline comparison"]
+    EXCL[("V2.EXCLUDED_PAIRS<br/>fail-closed, alias-expanded")]
+    RANK["winner arm: vector ranking<br/>+ exclusion + component filter"]
+    UI["ui/ constellation<br/>renders scored rows only"]
+    SEM[("V2.SENSORY_CATALOG<br/>semantic view")]
+    AN["Cortex Analyst<br/>NL → SQL"]
 
     CSV --> CURATE --> RAW
-    RAW --> V1
+    RAW --> V1 --> RANK
     RAW --> SIG
-    WIKI --> SW
-    SW --> SCORE
-    PARSE --> SCORE
-    SIG --> SCORE --> EVAL
+    WIKI --> SW --> RANK
+    SIG --> UI
+    SIG --> SEM --> AN
+    EXCL --> RANK --> UI
 ```
 
 ## Stack
 
-- Python: `dlt`, `pandas`
-- Snowflake: warehouses, schemas, `VECTOR`, `AI_EMBED`, `AI_COMPLETE`
-- Evaluation: frozen query set, pooled judgments, NDCG@5, Recall@5
-- Planned UI: Streamlit constellation graph
+Python (`dlt`, `pandas`, stdlib HTTP server) · Snowflake (`AI_COMPLETE`, `AI_EMBED`,
+`VECTOR`, VARIANT, semantic views, Cortex Analyst) · evaluation: frozen queries, pooled
+blinded judgments, NDCG@5 / P@5 / pooled recall. No external LLM API, no separate vector DB.
 
-No external LLM API key or separate vector database is required.
+## Data and license
 
-## Data And License Notes
-
-The V2 corpus is curated from RecipeNLG. RecipeNLG is for non-commercial research and
-educational use; do not commit the source CSV or generated extracts. This repo commits only
-the hand-authored curation list and evaluation metadata.
-
-Credit: RecipeNLG dataset by Poznan University of Technology researchers. Follow the
-RecipeNLG license and citation requirements when sharing results.
-
-The `.gitignore` intentionally excludes `data/*` except `data/curation_list.csv`.
+The corpus derives from **RecipeNLG** (Poznań University of Technology) — non-commercial
+research/educational use. The source CSV and all generated extracts stay local
+(`data/*` gitignored except the hand-authored `data/curation_list.csv`).
 
 ## Setup
 
-### 1. Python environment
-
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+cp .dlt/example.secrets.toml .dlt/secrets.toml   # key-pair auth; see comments inside
 ```
 
-### 2. Snowflake connection
+Pipeline order: `pipelines/curate.py` → `pipelines/load_curated.py` →
+`sql/06`–`08` (enrichment) → `pipelines/compile_wiki.py` → `sql/09`–`12` (parser, exclusion,
+scoring, pooled eval) → `pipelines/load_frozen_parses.py` → `sql/13`–`14` (insights,
+semantic view) → `ui/server.py`. Scale-up: `pipelines/scale_corpus.py` (meter-first — read
+PLAN.md §Weekend 5+ before spending).
 
-Run SQL in Snowsight using `CRAVING_WH`. Local Python scripts use dlt credentials:
-
-```bash
-cp .dlt/example.secrets.toml .dlt/secrets.toml
-```
-
-Use key-pair auth for programmatic Snowflake access. Password auth commonly fails because
-Snowflake enforces MFA for programmatic connections. The example secrets file includes the
-key-pair setup commands.
-
-Never commit `.dlt/secrets.toml`, private keys, or generated RecipeNLG extracts.
-
-## Running The Current Pipeline
-
-### Baseline, already completed
+## Checks
 
 ```bash
-python pipelines/curate.py --source ~/Downloads/archive/RecipeNLG_dataset.csv
-python pipelines/load_curated.py
-```
-
-Then run these in Snowsight:
-
-```text
-sql/01_setup.sql
-sql/06_v1_baseline.sql
-sql/07_eval_baseline.sql
-```
-
-The saved baseline readout is [eval/results_baseline.md](eval/results_baseline.md).
-
-### V2, current path
-
-```bash
+python -m pytest pipelines -v          # wiki compiler tests
 python pipelines/compile_wiki.py --check
-python pipelines/compile_wiki.py
 ```
 
-Then run in Snowsight:
+## Repo layout
 
 ```text
-sql/08_v2_signals.sql
-sql/09_query_parser.sql
-```
-
-Next planned file: V2 retrieval/scoring SQL for W3.
-
-## Local Checks
-
-```bash
-python pipelines/compile_wiki.py --check
-python -m compileall pipelines
-python -m pytest pipelines -v
-```
-
-If `pytest` crashes before collecting tests, check that you are using the project venv rather
-than a global Python distribution.
-
-## Repo Layout
-
-```text
-sql/
-  01_setup.sql          account setup and Cortex checks
-  06_v1_baseline.sql    frozen V1 baseline profiles + embeddings
-  07_eval_baseline.sql  baseline evaluation
-  08_v2_signals.sql     structured recipe signals
-  09_query_parser.sql   query parsing + frozen parses
-pipelines/
-  curate.py             RecipeNLG -> curated local CSV
-  load_curated.py       curated CSV -> Snowflake
-  compile_wiki.py       wiki frontmatter -> V2.SENSORY_WIKI
-wiki/
-  *.md                  human-readable craving concepts + axis weights
-eval/
-  queries.yml           frozen evaluation queries
-  judgments_baseline.csv
-  parses_frozen.csv
-  results_baseline.md
-archive/
-  retired V1 files
+sql/      01 setup · 06-07 V1 baseline + eval · 08 signals · 09 parser (frozen)
+          10 exclusion view · 11 V2 scoring · 12 pooled 4-arm eval
+          13 catalog insights · 14 semantic view
+pipelines/ curate · load_curated · scale_corpus · compile_wiki · load_frozen_parses
+wiki/     craving concepts, axis weights in frontmatter (Obsidian vault)
+eval/     queries.yml · JUDGING.md · judgments.csv (386, with provenance)
+          parses_frozen.csv · results_baseline.md · results_v2.md
+ui/       server.py (live) · live.html (constellation) · constellation_static.html (fallback)
 ```
