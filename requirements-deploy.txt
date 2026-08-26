@@ -1,0 +1,3 @@
+# Runtime deps for ui/server.py only (the live demo backend). Everything else it needs
+# is stdlib. The pipelines (dlt, pandas, snowpark) are NOT needed to serve.
+snowflake-connector-python>=3.12

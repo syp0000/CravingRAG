@@ -21,6 +21,7 @@ Usage:  .venv/bin/python ui/server.py   → http://localhost:8642
 """
 import html
 import json
+import os
 import sys
 import tomllib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -40,16 +41,39 @@ COMPONENT_RE_ANY = r".*\\b(paste|marinade|rub|seasoning|wrappers?|batter)\\b.*"
 COMPONENT_RE_END = (r".*\\b(sauce|dressing|glaze|stock|broth|ketchup|mustard|mayonnaise|mayo|"
                     r"relish|syrup|jam|jelly|chutney|pesto|vinaigrette|dip)\\s*$")
 
-with open(ROOT.parent / ".dlt/secrets.toml", "rb") as f:
-    CRED = tomllib.load(f)["destination"]["snowflake"]["credentials"]
+def _connect_kwargs():
+    """Local dev reads .dlt/secrets.toml (private key on disk). A deployed host has no
+    such file, so when SNOWFLAKE_ACCOUNT is set the credentials come from env vars and the
+    private key travels as inline PEM in SNOWFLAKE_PRIVATE_KEY."""
+    base = dict(schema="EVAL2")
+    if os.environ.get("SNOWFLAKE_ACCOUNT"):
+        from cryptography.hazmat.primitives import serialization  # ships with the connector
+        pwd = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PWD") or None
+        key = serialization.load_pem_private_key(
+            os.environ["SNOWFLAKE_PRIVATE_KEY"].encode(),
+            password=pwd.encode() if pwd else None)
+        base.update(
+            account=os.environ["SNOWFLAKE_ACCOUNT"], user=os.environ["SNOWFLAKE_USER"],
+            warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "CRAVING_WH"),
+            database=os.environ.get("SNOWFLAKE_DATABASE", "CRAVING_RAG"),
+            role=os.environ.get("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
+            private_key=key.private_bytes(serialization.Encoding.DER,
+                serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+        return base
+    with open(ROOT.parent / ".dlt/secrets.toml", "rb") as f:
+        c = tomllib.load(f)["destination"]["snowflake"]["credentials"]
+    base.update(account=c["host"], user=c["username"], private_key_file=c["private_key_path"],
+                warehouse=c["warehouse"], database=c["database"], role=c["role"])
+    if c.get("private_key_passphrase"):
+        base["private_key_file_pwd"] = c["private_key_passphrase"]
+    return base
+
+
+CONN_KWARGS = _connect_kwargs()
 
 
 def connect():
-    return snowflake.connector.connect(
-        account=CRED["host"], user=CRED["username"],
-        private_key_file=CRED["private_key_path"], warehouse=CRED["warehouse"],
-        database=CRED["database"], role=CRED["role"], schema="EVAL2",
-    )
+    return snowflake.connector.connect(**CONN_KWARGS)
 
 
 CONN = connect()
@@ -325,6 +349,8 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8642))       # hosts inject $PORT
+    host = os.environ.get("HOST", "127.0.0.1")     # deploy sets HOST=0.0.0.0
     q("SELECT 1")  # warm the warehouse before the first real query
-    print("CravingRAG live on http://localhost:8642")
-    ThreadingHTTPServer(("127.0.0.1", 8642), H).serve_forever()
+    print(f"CravingRAG live on http://{host}:{port}")
+    ThreadingHTTPServer((host, port), H).serve_forever()
