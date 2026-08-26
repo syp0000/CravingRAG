@@ -1,0 +1,15 @@
+.git
+.venv
+**/node_modules
+ui/app/dist
+data
+eval
+sql
+pipelines
+wiki
+archive
+docs/diagrams/*.png
+.dlt
+.obsidian
+.pytest_cache
+**/__pycache__
