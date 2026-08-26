@@ -180,7 +180,7 @@ const Sky = forwardRef(function Sky({ parallax }, ref) {
       const jit = (k, lo, hi) => lo + (hi - lo) * hash(seed * 13 + k * 7)
       // contacts spread ahead of the ship (ship sits ~18% from the left)
       const pts = top.map((d, i) => ({
-        x: 0.3 + (i / Math.max(1, top.length - 1)) * 0.4 + jit(i, -0.03, 0.03),
+        x: 0.18 + (i / Math.max(1, top.length - 1)) * 0.32 + jit(i, -0.02, 0.02),
         y: 0.2 + jit(i + 9, 0, 0.45) + (i % 2) * 0.12,
         rank: i, alpha: 0,
         label: d.title.length > 24 ? d.title.slice(0, 23) + '…' : d.title,
