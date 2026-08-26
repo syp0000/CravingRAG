@@ -232,6 +232,17 @@ control**, not only privacy: every `/search` is a live Cortex call against a run
 warehouse, so an open URL is an open credit meter. Render free tier is accepted with its one
 honest cost, a ~30-60s cold start after idle, mostly hidden behind the Access email step.
 
+**Two tiers, so "everyone can see it" and "credits are bounded" stop being in tension.** The
+gated live app answers arbitrary cravings but costs a Cortex call per search, which is why it
+stays invite-only. A second, fully public tier ([demo.cravingrag.com](https://demo.cravingrag.com))
+serves a **precomputed gallery**: the same React app built with `VITE_PUBLIC_GALLERY=1` reads
+a bundled `gallery.json` that `ui/build_gallery.py` generates once by running 20 curated
+cravings through the real pipeline. It is static files on Cloudflare Pages, so it costs
+nothing per view and needs no gate. The public link is the showpiece; the live warehouse
+sits behind Access. The API boundary that made this a one-line switch is the same
+`DecisionRecorder`-style seam used elsewhere: one `api.js` chooses live endpoints vs bundled
+JSON, and nothing downstream knows the difference.
+
 ---
 
 ## Still open

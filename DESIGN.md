@@ -312,17 +312,20 @@ be grounded in, which no amount of prompt tuning can substitute for.
 > manager rather than as initiative. Public APIs and published `schema.org/Recipe` JSON-LD are
 > designed to be consumed; use those.
 
-### Phase 9 — Deployment (private gated demo)   ✅ 2026-08-26
+### Phase 9 — Deployment, two tiers   ✅ 2026-08-26
 
-The measured system is live behind a private URL, not only runnable locally. One Docker
-image ([Dockerfile](Dockerfile)) builds the React app and serves it with the live API from a
+The measured system is live, and public without an unbounded bill. One Docker image
+([Dockerfile](Dockerfile)) builds the React app and serves it with the live API from a
 single process; Snowflake credentials come from env vars (inline PEM key), so no secret file
-ships. Hosted on Render, fronted by a Cloudflare-proxied custom domain with **Cloudflare
-Access** in front: only allowlisted emails get in, via a one-time email code. The gate
-doubles as credit control, since every `/search` is a real Cortex call. This is the infra
-half of the "live REST API source" transferable-skill argument in Phase 8: the pipeline now
-has a deployed, access-controlled front door. Details in DECISIONS §10 and the README
-"Deployment" section.
+ships. The **live app** (`cravingrag.com`) is hosted on Render behind **Cloudflare Access**:
+only allowlisted emails get in via a one-time email code, which is credit control as much as
+privacy since every `/search` is a real Cortex call. A second **public tier**
+([demo.cravingrag.com](https://demo.cravingrag.com)) serves a precomputed gallery: the same
+app built with `VITE_PUBLIC_GALLERY=1` replays 20 curated cravings from a bundled
+`gallery.json` (generated once by `ui/build_gallery.py`), static on Cloudflare Pages, zero
+Snowflake cost. This is the infra half of the "live REST API source" transferable-skill
+argument in Phase 8: a deployed, access-controlled front door, plus a free public showpiece.
+Details in DECISIONS §10 and the README "Deployment" section.
 
 ---
 

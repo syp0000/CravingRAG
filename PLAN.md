@@ -265,17 +265,23 @@ The original plan, kept for the method:
 Full 2.23M is embedding-only territory — signals enrichment scales linearly (~2.7B tokens
 for the full set) and does not fit a trial.
 
-## Weekend 6 — Deployment (private demo)
+## Weekend 6 — Deployment, two tiers
 
-**EXECUTED 2026-08-26.** The measured system is live behind a gated private URL, not only a
-local `server.py`. One Docker image ([Dockerfile](Dockerfile)) builds the React app and
-serves it with the live API from one process; Snowflake credentials come from `SNOWFLAKE_*`
-env vars (inline PEM key), so no secret file ships in the image (local dev still reads
-`.dlt/secrets.toml`). Hosted on Render (free tier); custom domain `cravingrag.com` proxied
-through Cloudflare with **Cloudflare Access** in front, so only allowlisted emails enter via
-a one-time email code. The gate is also cost control: every `/search` is a live Cortex call
-against a running warehouse. Honest cost of the free tier: ~30-60s cold start after idle,
-mostly hidden by the Access email step. See DECISIONS §10 and README "Deployment".
+**EXECUTED 2026-08-26.** The measured system is live, and public without an unbounded bill.
+
+**Live app (invite-only), `cravingrag.com`.** Arbitrary free-text pipeline. One Docker image
+([Dockerfile](Dockerfile)) builds the React app and serves it with the live API from one
+process; Snowflake credentials come from `SNOWFLAKE_*` env vars (inline PEM key), so no
+secret file ships (local dev still reads `.dlt/secrets.toml`). Hosted on Render (free tier);
+proxied through Cloudflare with **Cloudflare Access**, so only allowlisted emails enter via a
+one-time email code. The gate is also cost control: every `/search` is a live Cortex call.
+Free-tier cost: ~30-60s cold start after idle, mostly hidden by the Access email step.
+
+**Public gallery, `demo.cravingrag.com`.** The same React app built with
+`VITE_PUBLIC_GALLERY=1` replays 20 curated cravings from a bundled `gallery.json`
+(`ui/build_gallery.py` precomputes it once through the real pipeline). Static files on
+Cloudflare Pages, zero Snowflake cost per view, no login. This is the link that goes on a
+resume; the live warehouse stays behind Access. See DECISIONS §10 and README "Deployment".
 
 ## v3 — what the 2026-08-17 outside review asked for, deferred on purpose
 

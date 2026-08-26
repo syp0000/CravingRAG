@@ -103,21 +103,27 @@ The UI is the React app in `ui/app` (served built by `server.py`; `npm run dev` 
 does, the pipeline diagram from `docs/diagrams/`, process done, measured results). Motion is
 GSAP, kept quiet. Earlier skies live in `archive/`.
 
-## Deployment (private demo)
+## Deployment (two tiers)
 
-The whole demo is one Docker image ([Dockerfile](Dockerfile)): a Node stage compiles the
-React app, a Python stage serves that build and the live API from the same stdlib process.
-Runtime deps are just `snowflake-connector-python` ([requirements-deploy.txt](requirements-deploy.txt));
-Snowflake credentials come from `SNOWFLAKE_*` env vars with the key-pair private key as
-inline PEM, so no secret file ships in the image (`server.py` reads the local
-`.dlt/secrets.toml` only when those env vars are absent).
+Every `/search` is a real Cortex call against a live warehouse, so a wide-open public URL
+would be an open credit meter. The split solves that without hiding the work:
 
-Hosted on Render (free tier) behind a Cloudflare-proxied custom domain with **Cloudflare
-Access** in front, so the URL is private: only allowlisted emails get in, via a one-time
-code sent to their inbox (the visitor needs no account). The gate is also cost control, not
-just privacy, because every `/search` is a real Cortex call against a live warehouse. One
-free-tier caveat, stated honestly: the instance sleeps when idle, so the first hit after a
-lull takes ~30-60s to wake (the Access email-code step hides most of that wait).
+**Public gallery — [demo.cravingrag.com](https://demo.cravingrag.com).** Anyone, no login,
+zero cost per view. The same React app builds in gallery mode (`VITE_PUBLIC_GALLERY=1`,
+[ui/app/src/api.js](ui/app/src/api.js)) and replays 20 curated cravings from a bundled
+`gallery.json` that [ui/build_gallery.py](ui/build_gallery.py) precomputes once through the
+real pipeline. Static files only, hosted on Cloudflare Pages, so it never touches Snowflake.
+
+**Live app — cravingrag.com (invite-only).** The arbitrary free-text pipeline. One Docker
+image ([Dockerfile](Dockerfile)) builds the React app and serves it with the live API from
+one stdlib process; runtime deps are just `snowflake-connector-python`, and Snowflake
+credentials come from `SNOWFLAKE_*` env vars with the key-pair key as inline PEM, so no
+secret file ships (`server.py` falls back to `.dlt/secrets.toml` only for local dev). Hosted
+on Render (free tier) behind a Cloudflare-proxied domain with **Cloudflare Access**: only
+allowlisted emails get in, via a one-time code to their inbox (no account needed). The gate
+is cost control as much as privacy. Free-tier caveat, stated honestly: the instance sleeps
+when idle, so the first hit after a lull takes ~30-60s to wake (the Access email step hides
+most of that).
 
 ## Business side — the same axes as dimensions
 
