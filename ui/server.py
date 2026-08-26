@@ -53,10 +53,17 @@ def q(sql, params=None):
     return cur.fetchall()
 
 
-def search(text):
+def search(text, cuisines=None, avoid=None, spice=None, rich=None):
     parsed = json.loads(q("SELECT V2.PARSE_CRAVING(%s)", (text,))[0][0] or "{}")
     concepts = parsed.get("concepts") or []
     excludes = [e.lower() for e in (parsed.get("exclude") or [])]
+    # AVOID chips merge into the same exclusion machinery as parsed excludes
+    for a in (avoid or []):
+        if a and a.lower() not in excludes:
+            excludes.append(a.lower())
+    # CUISINE chips augment the embedding text: vectors carry identity well (measured),
+    # and the 19.7k scale rows have no cuisine tag to filter on. Honest query expansion.
+    embed_text = text + ((" . " + " or ".join(cuisines) + " cuisine") if cuisines else "")
 
     # intent axes from the wiki
     axes = {}
@@ -90,13 +97,30 @@ def search(text):
     comp = {int(r): bool(c) for r, c, m in rows}
     excl = {int(r): m for r, c, m in rows if m}
 
+    # dial filters ride the extracted axes: what the measurement said axes are FOR.
+    # Fail open on NULL: an unmeasured axis neither qualifies nor disqualifies a dish,
+    # except hard demands (fire / rich) which require measured evidence.
+    SPICE_COND = {
+        "none":   "AND (s.signals:spicy IS NULL OR s.signals:spicy <= 0.2)",
+        "mild":   "AND (s.signals:spicy IS NULL OR s.signals:spicy <= 0.5)",
+        "medium": "AND s.signals:spicy >= 0.3",
+        "fire":   "AND s.signals:spicy >= 0.6",
+    }
+    RICH_COND = {
+        "light": "AND (s.signals:rich IS NULL OR s.signals:rich <= 0.35)",
+        "rich":  "AND s.signals:rich >= 0.6",
+    }
+    conds = SPICE_COND.get(spice or "", "") + " " + RICH_COND.get(rich or "", "")
+
     # winner-arm ranking: profile vector cosine, filters applied (embed evaluated ONCE)
     top = q(f"""
         SELECT v.recipe_id, v.title,
                ROUND(VECTOR_COSINE_SIMILARITY(v.profile_vec, e.qv), 4) AS sim
         FROM V1.RECIPE_PROFILES v
+        JOIN V2.RECIPE_SIGNALS s USING (recipe_id)
         CROSS JOIN (SELECT AI_EMBED('{EMBED}', %s) AS qv) e
-        ORDER BY sim DESC""", (text,))
+        WHERE TRUE {conds}
+        ORDER BY sim DESC""", (embed_text,))
     ranked, seen = [], set()
     for rid, title, sim in top:
         rid = int(rid)
@@ -127,6 +151,7 @@ def search(text):
             except Exception:
                 d["ingredients"], d["directions"] = [], []
     return {"query": text, "concepts": concepts, "excludes": excludes,
+            "params": {"cuisines": cuisines or [], "spice": spice, "rich": rich},
             "axes": [{"axis": a, "target": t} for a, t in sorted(axes.items())],
             "excluded": [{"recipe_id": r, "matched": m} for r, m in excl.items()],
             "components": [r for r, c in comp.items() if c],
@@ -159,10 +184,15 @@ class H(BaseHTTPRequestHandler):
                 rows = q("SELECT recipe_id, title FROM raw.curated_recipes ORDER BY recipe_id")
                 self.send_json([{"recipe_id": int(r), "title": t.strip()} for r, t in rows])
             elif u.path == "/search":
-                text = (parse_qs(u.query).get("q") or [""])[0].strip()
+                qs = parse_qs(u.query)
+                text = (qs.get("q") or [""])[0].strip()
                 if not text:
                     return self.send_json({"error": "empty query"}, 400)
-                self.send_json(search(text))
+                cuisines = [c for c in (qs.get("cuisine") or [""])[0].split(",") if c]
+                avoid = [a for a in (qs.get("avoid") or [""])[0].split(",") if a]
+                spice = (qs.get("spice") or [None])[0]
+                rich = (qs.get("rich") or [None])[0]
+                self.send_json(search(text, cuisines, avoid, spice, rich))
             else:
                 self.send_json({"error": "not found"}, 404)
         except Exception as e:  # surface errors to the UI during the demo, don't die

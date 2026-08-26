@@ -61,6 +61,10 @@ export default function App() {
   const [picked, setPicked] = useState(0)
   const [err, setErr] = useState('')
   const [alt, setAlt] = useState(0)
+  const [cuisines, setCuisines] = useState([])
+  const [spice, setSpice] = useState('')
+  const [rich, setRich] = useState('')
+  const [avoid, setAvoid] = useState([])
   const [shipPos, setShipPos] = useState({ left: '12vw', top: '46vh' })
   useMotionValueEvent(scrollY, 'change', v => setAlt(Math.round(v / 8)))
   useEffect(() => { document.body.style.overflow = view === 'voyage' ? 'hidden' : '' }, [view])
@@ -77,7 +81,12 @@ export default function App() {
     setView('voyage'); setShipPos({ left: '6vw', top: '52vh' })
     setStage('warp'); sky.current?.warp()
     let res
-    const fetching = fetch('/search?q=' + encodeURIComponent(q)).then(r => r.json())
+    const ps = new URLSearchParams({ q })
+    if (cuisines.length) ps.set('cuisine', cuisines.join(','))
+    if (avoid.length) ps.set('avoid', avoid.join(','))
+    if (spice) ps.set('spice', spice)
+    if (rich) ps.set('rich', rich)
+    const fetching = fetch('/search?' + ps).then(r => r.json())
     // the ship tours while the warehouse works: broad sweeps across the field
     setShipPos({ left: '28vw', top: '26vh' }); await sleep(1500)
     setShipPos({ left: '52vw', top: '62vh' }); await sleep(1500)
@@ -189,6 +198,36 @@ export default function App() {
               </motion.form>
               {err && <p className="mono" style={{ textAlign: 'center', color: 'var(--accent)', marginTop: 16, fontSize: 13 }}>{err}</p>}
 
+              <motion.div {...fadeUp} style={{ maxWidth: 680, margin: '26px auto 0',
+                border: '1px solid var(--line)', borderRadius: 2, padding: '18px 20px',
+                background: 'rgba(13,14,17,.6)' }}>
+                <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', color: 'var(--dim)', marginBottom: 12 }}>
+                  MISSION PARAMETERS · OPTIONAL
+                </div>
+                <ParamRow label="CUISINE">
+                  {['korean', 'thai', 'indian', 'japanese', 'chinese', 'italian', 'mexican', 'american'].map(c => (
+                    <Chip key={c} on={cuisines.includes(c)}
+                      onClick={() => setCuisines(v => v.includes(c) ? v.filter(x => x !== c) : [...v, c])}>{c}</Chip>
+                  ))}
+                </ParamRow>
+                <ParamRow label="SPICE">
+                  {[['', 'any'], ['none', 'none'], ['mild', 'mild'], ['medium', 'medium'], ['fire', 'fire']].map(([v, l]) => (
+                    <Chip key={l} on={spice === v} onClick={() => setSpice(v)}>{l}</Chip>
+                  ))}
+                </ParamRow>
+                <ParamRow label="RICHNESS">
+                  {[['', 'any'], ['light', 'light'], ['rich', 'rich & creamy']].map(([v, l]) => (
+                    <Chip key={l} on={rich === v} onClick={() => setRich(v)}>{l}</Chip>
+                  ))}
+                </ParamRow>
+                <ParamRow label="AVOID" last>
+                  {['shellfish', 'peanut', 'almond', 'dairy', 'cilantro', 'pork'].map(a => (
+                    <Chip key={a} on={avoid.includes(a)}
+                      onClick={() => setAvoid(v => v.includes(a) ? v.filter(x => x !== a) : [...v, a])}>{a}</Chip>
+                  ))}
+                </ParamRow>
+              </motion.div>
+
               <motion.div {...fadeUp} className="mono" style={{ maxWidth: 1000, margin: '18vh auto 14px',
                 fontSize: 12, letterSpacing: '0.22em', color: 'var(--accent)',
                 display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -239,6 +278,10 @@ export default function App() {
             <div style={{ position: 'fixed', left: 24, bottom: 24, zIndex: 4, maxWidth: '46vw' }}>
               <div className="mono" style={{ fontSize: 11, letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: 8 }}>
                 MISSION LOG · “{q}”
+                {(cuisines.length > 0 || spice || rich || avoid.length > 0) && (
+                  <span className="accent"> · {[...cuisines, spice && 'spice:' + spice, rich && 'rich:' + rich,
+                    ...avoid.map(a => 'no ' + a)].filter(Boolean).join(' / ').toUpperCase()}</span>
+                )}
               </div>
               <AnimatePresence mode="wait">
                 {stage && stage !== 'done' && (
@@ -350,6 +393,29 @@ export default function App() {
         )}
       </AnimatePresence>
     </>
+  )
+}
+
+function ParamRow({ label, children, last }) {
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', marginBottom: last ? 0 : 11 }}>
+      <span className="mono" style={{ fontSize: 10.5, letterSpacing: '0.18em', color: '#6b675f',
+        flex: 'none', width: 74 }}>{label}</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{children}</div>
+    </div>
+  )
+}
+
+function Chip({ on, onClick, children }) {
+  return (
+    <button type="button" onClick={onClick} className="mono"
+      style={{ background: on ? 'var(--accent)' : 'transparent',
+        color: on ? '#0a0a0a' : 'var(--dim)',
+        border: '1px solid ' + (on ? 'var(--accent)' : 'var(--line)'),
+        borderRadius: 2, padding: '5px 11px', fontSize: 11.5, letterSpacing: '0.06em',
+        textTransform: 'uppercase' }}>
+      {children}
+    </button>
   )
 }
 
