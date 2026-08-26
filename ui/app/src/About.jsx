@@ -64,7 +64,7 @@ export default function About() {
   }, { scope: root })
 
   return (
-    <div ref={root} style={{ position: 'relative', zIndex: 2, maxWidth: 860, margin: '0 auto', padding: '110px 28px 120px' }}>
+    <div ref={root} className="about-content" style={{ position: 'relative', zIndex: 2, maxWidth: 860, margin: '0 auto', padding: '110px 28px 120px' }}>
       <section className="hero about-hero" style={{ marginBottom: 72 }}>
         <div className="mono about-hero-kicker" style={{ fontSize: 12, letterSpacing: '0.26em', color: 'var(--dim)', marginBottom: 14 }}>ABOUT THIS PROJECT</div>
         <h1 className="about-hero-title">

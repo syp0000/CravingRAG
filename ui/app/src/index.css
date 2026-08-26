@@ -62,20 +62,34 @@ a { color: inherit; }
 .search-page, .about-page { min-height: 100vh; isolation: isolate; }
 .cinematic-backdrop { position: fixed; inset: 0; z-index: -2; overflow: hidden; background-color: #05070b; background-position: center; background-size: cover; background-repeat: no-repeat; opacity: 1; transition: opacity .9s ease, filter .9s ease; }
 .cinematic-backdrop video { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center; animation: video-fade-in .9s ease both; transform: translateZ(0); backface-visibility: hidden; will-change: transform; }
+.cinematic-single-video { position: absolute; inset: 0; overflow: hidden; }
+.cinematic-single-video video { position: absolute; inset: 0; }
+.story-starfield { position: absolute; inset: 0; opacity: 0; visibility: hidden; }
 .cinematic-video-stack { position: absolute; inset: 0; animation: video-fade-in .9s ease both; }
 .cinematic-video-stack video { position: absolute; inset: 0; animation: none; }
 .cinematic-video-stack video + video { opacity: 0; visibility: hidden; }
-.cinematic-backdrop--landing { background-image: url('/media/craving-space-poster.png'); background-position: 36% center; }
-.cinematic-backdrop--landing video { object-position: 38% center; }
-.cinematic-backdrop--results { background-image: url('/media/results-gravity-poster.png'); opacity: .78; filter: saturate(.9) brightness(.92) contrast(1.05); }
-.cinematic-backdrop--about { background-image: url('/media/about-celestial-poster.png'); opacity: .74; filter: saturate(.88) brightness(.92) contrast(1.02); }
+.destination-stars { position: absolute; z-index: 1; left: 50%; top: 50%; width: max(100vw, 177.778vh); aspect-ratio: 16 / 9; transform: translate(-50%, -50%); pointer-events: none; }
+.destination-star { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; opacity: 0; visibility: hidden; background: #f5fbff; box-shadow: 0 0 7px 2px rgba(218,239,255,.96), 0 0 22px 8px rgba(119,185,235,.72), 0 0 48px 17px rgba(82,153,219,.35); transform-origin: center; }
+.destination-star::before, .destination-star::after { content: ''; position: absolute; left: 50%; top: 50%; background: linear-gradient(90deg, transparent, rgba(232,247,255,.9), transparent); transform: translate(-50%, -50%); }
+.destination-star::before { width: 46px; height: 1px; }
+.destination-star::after { width: 1px; height: 38px; background: linear-gradient(180deg, transparent, rgba(232,247,255,.82), transparent); }
+.cinematic-backdrop--landing { background-image: url('/media/search-ready-poster.png'); background-position: 42% center; }
+.cinematic-backdrop--landing video { object-position: 42% center; }
+.cinematic-backdrop--journey { background-image: url('/media/search-ready-poster.png'); background-position: 42% center; opacity: 1; filter: saturate(.94) brightness(1.02) contrast(1.02); }
+.cinematic-backdrop--journey video { object-position: 42% center; }
+.cinematic-backdrop--story { background-image: url('/media/search-departure-poster.png'); background-position: 42% center; opacity: 1; filter: none; }
+.cinematic-backdrop--story video { object-position: 42% center; }
+.cinematic-backdrop--results { background-image: url('/media/search-discovery-poster.png'); opacity: .78; filter: saturate(.9) brightness(.92) contrast(1.05); }
+.cinematic-backdrop--about { background-image: url('/media/about-celestial-poster.png'); opacity: .68; filter: saturate(.72) brightness(.84) contrast(1.02); }
 .cinematic-backdrop--quiet { opacity: .2; filter: saturate(.65) contrast(1.08); }
 .cinematic-vignette { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3,5,9,.16) 0%, rgba(3,5,9,.18) 34%, rgba(3,5,9,.76) 70%, rgba(3,5,9,.92) 100%), linear-gradient(180deg, rgba(0,0,0,.18) 0%, transparent 35%, rgba(3,5,9,.55) 100%); }
 .cinematic-backdrop--results.cinematic-backdrop--quiet { opacity: .78; filter: saturate(.9) brightness(.92) contrast(1.05); }
 .cinematic-backdrop--results .cinematic-vignette { background: linear-gradient(90deg, rgba(3,5,9,.8) 0%, rgba(3,5,9,.6) 37%, rgba(3,5,9,.08) 52%, rgba(3,5,9,.52) 73%, rgba(3,5,9,.76) 100%), linear-gradient(180deg, rgba(3,5,9,.08), rgba(3,5,9,.34)); }
+.cinematic-backdrop--journey .cinematic-vignette { background: linear-gradient(90deg, rgba(3,5,9,.18) 0%, rgba(3,5,9,.08) 48%, rgba(3,5,9,.28) 100%), linear-gradient(180deg, rgba(3,5,9,.08), rgba(3,5,9,.25)); }
+.cinematic-backdrop--story .cinematic-vignette { background: linear-gradient(90deg, rgba(3,5,9,.14) 0%, rgba(3,5,9,.08) 48%, rgba(3,5,9,.34) 100%), linear-gradient(180deg, rgba(3,5,9,.06), rgba(3,5,9,.28)); }
 .cinematic-backdrop--about .cinematic-vignette { background: linear-gradient(90deg, rgba(3,5,9,.58) 0%, rgba(3,5,9,.3) 58%, rgba(3,5,9,.42) 100%), linear-gradient(180deg, rgba(3,5,9,.18), rgba(3,5,9,.52)); }
 .cinematic-grain { position: absolute; inset: -50%; opacity: .04; pointer-events: none; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E"); transform: rotate(.01deg); }
-.search-sky { opacity: .15; transition: opacity .9s ease; }
+.search-sky { opacity: .24; transition: opacity .9s ease; }
 .search-sky--active { opacity: 1; }
 
 .query {
@@ -88,6 +102,8 @@ a { color: inherit; }
   transition: transform .7s cubic-bezier(.22,1,.36,1), padding .6s, margin .6s;
 }
 .query--results { width: min(640px, calc(100vw - 560px)); margin-left: max(5vw, 44px); margin-right: auto; padding-top: 118px; transform: none; }
+.query-intro { will-change: transform, opacity; }
+.journey-status { opacity: 0; visibility: hidden; min-height: 58px; margin-top: clamp(26px, 7vh, 72px); text-align: right; text-shadow: 0 2px 18px rgba(0,0,0,.7); }
 .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 17px; color: rgba(236,233,226,.72); font-size: 10.5px; letter-spacing: .2em; white-space: nowrap; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #9cf27b; box-shadow: 0 0 12px rgba(156,242,123,.7); }
 .eyebrow-rule { width: 28px; height: 1px; background: rgba(255,255,255,.22); }
@@ -158,7 +174,7 @@ a { color: inherit; }
 .panel-back { display: none; }
 
 .about-page { background: rgba(4,7,12,.12); }
-.about-page > div:not(.cinematic-backdrop) { text-shadow: 0 2px 18px rgba(0,0,0,.46); }
+.about-content { text-shadow: 0 2px 18px rgba(0,0,0,.46); }
 .about-hero-title { margin-bottom: 20px; font-size: clamp(44px, 6.4vw, 78px); font-weight: 400; line-height: .96; letter-spacing: -.025em; text-wrap: balance; }
 .about-hero-copy { color: rgba(241,238,232,.78) !important; text-shadow: 0 2px 20px rgba(0,0,0,.72); }
 
@@ -199,6 +215,7 @@ a { color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .cinematic-backdrop video { display: none; }
+  .cinematic-backdrop--results { background-image: url('/media/search-discovery-final.png'); }
 }
 
 @keyframes video-fade-in {

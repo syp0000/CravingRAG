@@ -58,6 +58,8 @@ function Search() {
   const [avoid, setAvoid] = useState([])
   const [detailOpen, setDetailOpen] = useState(false)
   const [gallery, setGallery] = useState([])
+  const dataReady = useRef(false)
+  const journeyDone = useRef(false)
   const busy = stage && stage !== 'done'
   const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -86,6 +88,14 @@ function Search() {
   }, { dependencies: [stage], scope: root, revertOnUpdate: true })
 
   useGSAP(() => {
+    if (!busy) return
+    gsap.timeline({ defaults: { ease: 'power2.out' } })
+      .addLabel('departure')
+      .to('.query-intro', { autoAlpha: 0, y: -18, duration: 0.58 }, 'departure')
+      .fromTo('.journey-status', { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.45 }, 'departure+=0.3')
+  }, { dependencies: [busy], scope: root, revertOnUpdate: true })
+
+  useGSAP(() => {
     if (stage !== 'done' || !R) return
     gsap.timeline({ defaults: { ease: 'power2.out' } })
       .addLabel('detail')
@@ -111,7 +121,7 @@ function Search() {
       setCuisines(preset.params?.cuisines || []); setAvoid(preset.params?.avoid || [])
       setSpice(preset.params?.spice || ''); setRich(preset.params?.rich || '')
     } else if (!q.trim()) return
-    setErr(''); setR(null); setPicked(0); setDetailOpen(false); sky.current?.reset()
+    setErr(''); setR(null); setPicked(0); setDetailOpen(false); dataReady.current = false; journeyDone.current = false; sky.current?.reset()
     setStage('parse')
     let res
     if (preset) { await sleep(650); res = preset.result }   // let PARSING show; result is canned
@@ -123,11 +133,13 @@ function Search() {
     setR(res)
     setStage('axes'); await sleep(900)
     if ((res.excluded || []).length) { setStage('excl'); await sleep(900) }
-    setStage('rank'); sky.current?.arrive(res.top); await sleep(300 * res.top.length + 200)
-    setStage('done')
+    setStage('rank'); await sleep(300 * res.top.length + 200)
+    dataReady.current = true
+    if (journeyDone.current) setStage('done')
   }
-  function fail(msg) { setErr(msg); setStage(null); sky.current?.reset() }
-  function clear() { setStage(null); setR(null); setDetailOpen(false); sky.current?.reset() }
+  function finishJourney() { journeyDone.current = true; if (dataReady.current) setStage('done') }
+  function fail(msg) { setErr(msg); setStage(null); dataReady.current = false; journeyDone.current = false; sky.current?.reset() }
+  function clear() { setStage(null); setR(null); setDetailOpen(false); dataReady.current = false; journeyDone.current = false; sky.current?.reset() }
   function selectDish(i) { setPicked(i); setDetailOpen(true) }
 
   const dish = R?.top?.[picked]
@@ -135,8 +147,8 @@ function Search() {
 
   return (
     <div ref={root} className={`search-page ${stage === 'done' ? 'search-page--results' : ''}`}>
-      <CinematicBackdrop variant={stage ? 'results' : 'landing'} quiet={Boolean(stage)} />
-      {stage !== 'done' && <Sky ref={sky} className={`search-sky ${stage ? 'search-sky--active' : ''}`} />}
+      <SingleAstronautBackdrop departing={Boolean(stage)} resultsVisible={stage === 'done'} onComplete={finishJourney} />
+      <Sky ref={sky} className="search-sky" />
 
       {/* The footage composes left; the search occupies its negative space on the right. */}
       <main className={`query ${stage === 'done' ? 'query--results' : ''}`}>
@@ -144,6 +156,7 @@ function Search() {
           <ResultsOverview query={q} params={params} results={R} picked={picked}
             onPick={selectDish} onEdit={clear} />
         ) : <>
+          <div className="query-intro">
           <div className="eyebrow mono">
             <span className="status-dot" /> {IS_PUBLIC ? 'PRECOMPUTED GALLERY' : 'LIVE RETRIEVAL'} <span className="eyebrow-rule" /> 20,000 REAL RECIPES
           </div>
@@ -199,7 +212,12 @@ function Search() {
             </div>
           </details>}
 
-          <div className="mono progress-log">
+          <p className="mono search-disclaimer">
+            MATCHES ARE AI-EXTRACTED AND CAN BE WRONG · EXCLUSION IS A PREFERENCE FILTER, NOT ALLERGY GUIDANCE
+          </p>
+          </div>
+
+          <div className="mono progress-log journey-status">
             {stage && <div className="progress-query">
               “{q}”{params.length > 0 && <span className="accent"> · {params.join(' / ').toUpperCase()}</span>}
             </div>}
@@ -209,9 +227,6 @@ function Search() {
               {stage === 'excl' && R && <span className="accent">  −{R.excluded.length} dishes</span>}
             </div>}
           </div>
-          <p className="mono search-disclaimer">
-            MATCHES ARE AI-EXTRACTED AND CAN BE WRONG · EXCLUSION IS A PREFERENCE FILTER, NOT ALLERGY GUIDANCE
-          </p>
         </>}
       </main>
 
@@ -301,14 +316,156 @@ function ResultsOverview({ query, params, results, picked, onPick, onEdit }) {
   )
 }
 
+const SINGLE_ASTRONAUT_STORY = {
+  src: '/media/search-departure.mp4',
+  poster: '/media/search-departure-poster.png',
+  idleRate: 0.9,
+  searchRate: 0.68,
+  fadeAt: 8.95,
+  fadeDuration: 1.15,
+}
+
+const MOVING_STARFIELD = {
+  src: '/media/results-gravity.mp4',
+  poster: '/media/results-gravity-poster.png',
+  playbackRate: 0.72,
+  preload: 'auto',
+  overlap: 1.4,
+}
+
+function SingleAstronautBackdrop({ departing, resultsVisible, onComplete }) {
+  const root = useRef(null)
+  const astronautLayer = useRef(null)
+  const video = useRef(null)
+  const starfield = useRef(null)
+  const departingRef = useRef(departing)
+  const onCompleteRef = useRef(onComplete)
+  const reachedStars = useRef(false)
+  const transitioning = useRef(false)
+  const handoff = useRef(null)
+
+  useEffect(() => { departingRef.current = departing }, [departing])
+  useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
+
+  useGSAP((_, contextSafe) => {
+    const element = video.current
+    const astronaut = astronautLayer.current
+    const stars = starfield.current
+    let started = false
+    let raf = 0
+
+    const fadeToStars = contextSafe(() => {
+      if (transitioning.current || reachedStars.current) return
+      transitioning.current = true
+      handoff.current = gsap.timeline({
+        defaults: { duration: SINGLE_ASTRONAUT_STORY.fadeDuration, ease: 'sine.inOut' },
+        onComplete: () => {
+          element.pause()
+          reachedStars.current = true
+          transitioning.current = false
+          if (departingRef.current) onCompleteRef.current?.()
+        },
+      })
+        .addLabel('empty-space')
+        .to(astronaut, { autoAlpha: 0 }, 'empty-space')
+        .to(stars, { autoAlpha: 1 }, 'empty-space')
+    })
+
+    const start = () => {
+      if (started || element.readyState < 1) return
+      started = true
+      element.defaultPlaybackRate = SINGLE_ASTRONAUT_STORY.idleRate
+      element.playbackRate = SINGLE_ASTRONAUT_STORY.idleRate
+      gsap.set(astronaut, { autoAlpha: 1 })
+      gsap.set(stars, { autoAlpha: 0 })
+      element.play().catch(() => {})
+    }
+
+    const tick = () => {
+      if (!reachedStars.current && !transitioning.current && element.currentTime >= SINGLE_ASTRONAUT_STORY.fadeAt) fadeToStars()
+      raf = requestAnimationFrame(tick)
+    }
+
+    element.addEventListener('loadedmetadata', start)
+    start()
+    raf = requestAnimationFrame(tick)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      handoff.current?.kill()
+      element.removeEventListener('loadedmetadata', start)
+      element.pause()
+    }
+  }, { scope: root })
+
+  useGSAP((_, contextSafe) => {
+    const element = video.current
+    if (departing) {
+      if (reachedStars.current) {
+        contextSafe(() => onCompleteRef.current?.())()
+      } else {
+        gsap.to(element, {
+          playbackRate: SINGLE_ASTRONAUT_STORY.searchRate,
+          duration: 1.5,
+          ease: 'sine.inOut',
+        })
+      }
+    } else {
+      gsap.to(element, {
+        playbackRate: SINGLE_ASTRONAUT_STORY.idleRate,
+        duration: 0.7,
+        ease: 'sine.inOut',
+      })
+      if (reachedStars.current || element.ended) {
+        handoff.current?.kill()
+        reachedStars.current = false
+        transitioning.current = false
+        element.currentTime = 0
+        gsap.set(astronautLayer.current, { autoAlpha: 1 })
+        gsap.set(starfield.current, { autoAlpha: 0 })
+        element.play().catch(() => {})
+      }
+    }
+  }, { scope: root, dependencies: [departing] })
+
+  return (
+    <div ref={root} className="cinematic-backdrop cinematic-backdrop--story" aria-hidden="true">
+      <div ref={astronautLayer} className="cinematic-single-video">
+        <video ref={video} muted playsInline preload="auto" poster={SINGLE_ASTRONAUT_STORY.poster}>
+          <source src={SINGLE_ASTRONAUT_STORY.src} type="video/mp4" />
+        </video>
+      </div>
+      <div ref={starfield} className="story-starfield">
+        <SeamlessVideo media={MOVING_STARFIELD} />
+      </div>
+      <DestinationStars active={resultsVisible} />
+      <div className="cinematic-vignette" />
+      <div className="cinematic-grain" />
+    </div>
+  )
+}
+
 const BACKDROPS = {
   landing: {
     src: '/media/search-departure.mp4',
-    poster: '/media/search-departure-poster.png',
+    poster: '/media/search-ready-poster.png',
     preload: 'auto',
     loop: false,
-    holdAt: 7.2,
+    idleAt: 4.17,
     ambientDrift: true,
+  },
+  journey: {
+    poster: '/media/search-ready-poster.png',
+    sequence: true,
+    departureSrc: '/media/search-departure.mp4',
+    departureStart: 4.17,
+    departureRate: 1.15,
+    crossfadeAt: 7.72,
+    discoverySrc: '/media/search-discovery.mp4',
+    discoveryRate: 1,
+    overlap: 0.85,
+    twinkleTargets: true,
+    starRevealAt: 7.65,
   },
   results: {
     src: '/media/search-discovery.mp4',
@@ -328,11 +485,11 @@ const BACKDROPS = {
   },
 }
 
-function CinematicBackdrop({ variant = 'landing', quiet = false }) {
+function CinematicBackdrop({ variant = 'landing', quiet = false, onJourneyComplete }) {
   const media = BACKDROPS[variant]
   return (
     <div className={`cinematic-backdrop cinematic-backdrop--${variant} ${quiet ? 'cinematic-backdrop--quiet' : ''}`} aria-hidden="true">
-      {media.seamless ? <SeamlessVideo media={media} /> : (
+      {media.sequence ? <JourneyVideo media={media} onComplete={onJourneyComplete} /> : media.seamless ? <SeamlessVideo media={media} /> : (
         <AmbientHoldVideo media={media} />
       )}
       {media.twinkleTargets && <DestinationStars revealAt={media.starRevealAt} />}
@@ -351,21 +508,28 @@ function AmbientHoldVideo({ media }) {
     const rate = media.playbackRate ?? 1
     let held = false
 
-    const applyRate = () => {
+    const startAmbientDrift = contextSafe(() => {
+      if (!media.ambientDrift || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: 'sine.inOut' } })
+        .to(element, { scale: 1.028, xPercent: 0.45, yPercent: -0.3, duration: 7.5 })
+        .to(element, { scale: 1.016, xPercent: -0.2, yPercent: 0.18, duration: 6.5 })
+    })
+    const applyRate = contextSafe(() => {
       element.defaultPlaybackRate = rate
       element.playbackRate = rate
-    }
+      if (media.idleAt && !held && element.readyState >= 1) {
+        held = true
+        element.currentTime = media.idleAt
+        element.pause()
+        startAmbientDrift()
+      }
+    })
     const holdAstronaut = contextSafe(() => {
       if (held || !media.holdAt || element.currentTime < media.holdAt) return
       held = true
       element.pause()
       element.currentTime = media.holdAt
-
-      if (media.ambientDrift && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: 'sine.inOut' } })
-          .to(element, { scale: 1.028, xPercent: 0.45, yPercent: -0.3, duration: 7.5 })
-          .to(element, { scale: 1.016, xPercent: -0.2, yPercent: 0.18, duration: 6.5 })
-      }
+      startAmbientDrift()
     })
 
     element.addEventListener('loadedmetadata', applyRate)
@@ -381,8 +545,84 @@ function AmbientHoldVideo({ media }) {
 
   return (
     <div ref={root} className="cinematic-single-video">
-      <video ref={video} key={media.src} autoPlay muted loop={media.loop ?? true} playsInline preload={media.preload ?? 'metadata'} poster={media.poster}>
+      <video ref={video} key={media.src} autoPlay={!media.idleAt} muted loop={media.loop ?? true} playsInline preload={media.preload ?? 'metadata'} poster={media.poster}>
         <source src={media.src} type="video/mp4" />
+      </video>
+    </div>
+  )
+}
+
+function JourneyVideo({ media, onComplete }) {
+  const root = useRef(null)
+  const departure = useRef(null)
+  const discovery = useRef(null)
+
+  useGSAP((_, contextSafe) => {
+    const first = departure.current
+    const second = discovery.current
+    let started = false
+    let transitioning = false
+    let raf = 0
+    let handoff
+
+    const start = () => {
+      if (started || first.readyState < 1 || second.readyState < 1) return
+      started = true
+      first.currentTime = media.departureStart
+      first.defaultPlaybackRate = media.departureRate
+      first.playbackRate = media.departureRate
+      second.currentTime = 0
+      second.defaultPlaybackRate = media.discoveryRate
+      second.playbackRate = media.discoveryRate
+      gsap.set(first, { autoAlpha: 1 })
+      gsap.set(second, { autoAlpha: 0 })
+      first.play().catch(() => {})
+    }
+
+    const crossfade = contextSafe(() => {
+      if (transitioning) return
+      transitioning = true
+      second.currentTime = 0
+      second.play().catch(() => {})
+      handoff = gsap.timeline({
+        defaults: { duration: media.overlap, ease: 'sine.inOut' },
+        onComplete: () => first.pause(),
+      })
+        .addLabel('deep-space')
+        .to(first, { autoAlpha: 0 }, 'deep-space')
+        .to(second, { autoAlpha: 1 }, 'deep-space')
+    })
+    const finish = contextSafe(() => onComplete?.())
+
+    const tick = () => {
+      if (started && !transitioning && first.currentTime >= media.crossfadeAt) crossfade()
+      raf = requestAnimationFrame(tick)
+    }
+
+    first.addEventListener('loadedmetadata', start)
+    second.addEventListener('loadedmetadata', start)
+    second.addEventListener('ended', finish)
+    start()
+    raf = requestAnimationFrame(tick)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      handoff?.kill()
+      first.removeEventListener('loadedmetadata', start)
+      second.removeEventListener('loadedmetadata', start)
+      second.removeEventListener('ended', finish)
+      first.pause()
+      second.pause()
+    }
+  }, { scope: root, dependencies: [media] })
+
+  return (
+    <div ref={root} className="cinematic-video-stack cinematic-journey-stack">
+      <video ref={departure} muted playsInline preload="auto" poster={media.poster}>
+        <source src={media.departureSrc} type="video/mp4" />
+      </video>
+      <video ref={discovery} muted playsInline preload="auto">
+        <source src={media.discoverySrc} type="video/mp4" />
       </video>
     </div>
   )
@@ -396,11 +636,15 @@ const DESTINATION_POINTS = [
   [17.2, 79.0],
 ]
 
-function DestinationStars({ revealAt = 4.65 }) {
+function DestinationStars({ active = true, revealAt = 0 }) {
   const root = useRef(null)
 
   useGSAP(() => {
     const stars = gsap.utils.toArray('.destination-star')
+    if (!active) {
+      gsap.set(stars, { autoAlpha: 0, scale: 0.45 })
+      return
+    }
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
     if (reduced) {
       gsap.set(stars, { autoAlpha: 0.72, scale: 1 })
@@ -425,7 +669,7 @@ function DestinationStars({ revealAt = 4.65 }) {
         ease: 'sine.inOut',
       })
     })
-  }, { scope: root, dependencies: [revealAt], revertOnUpdate: true })
+  }, { scope: root, dependencies: [active, revealAt], revertOnUpdate: true })
 
   return (
     <div ref={root} className="destination-stars">
