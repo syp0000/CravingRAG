@@ -209,13 +209,14 @@ the pieces below are other people's work, used under their licenses.
 | React, Vite | UI build | Meta, Evan You and contributors | MIT |
 | `dlt`, `snowflake-connector-python`, `pandas`, PyYAML | loading, Snowflake access, data handling | respective authors | Apache-2.0 / BSD / MIT |
 | Snowflake Cortex (`AI_COMPLETE`, `AI_EMBED`, Cortex Analyst) | enrichment, embeddings, semantic layer | Snowflake | Snowflake terms of service |
+| [Google Flow](https://labs.google/flow) (Veo) | the three background videos + posters under `ui/app/public/media`, generated for this project | Google | generated output, used under [Google's Gemini/Flow terms](https://policies.google.com/terms/generative-ai) |
 
-Background footage under `ui/app/public/media` (three mp4 + posters): source and license
-TODO, fill in before publishing.
+Background footage under `ui/app/public/media` (three mp4 + posters) is AI-generated with
+Google Flow (Veo) for this project; used under Google's generative-AI terms.
 
-**This repository's own license.** No `LICENSE` file yet. Until one exists the code is all
-rights reserved by default, and the RecipeNLG-derived data stays non-commercial regardless
-of what the code license ends up being.
+**This repository's own license.** The source code is [MIT](LICENSE). The license covers
+the authored code only — the RecipeNLG-derived data stays non-commercial research/educational
+regardless, and the generated media and third-party dependencies above keep their own terms.
 
 ## Setup
 
