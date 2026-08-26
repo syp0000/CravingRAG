@@ -67,35 +67,45 @@ export default function App() {
 
   const sleep = ms => new Promise(r => setTimeout(r, ms))
 
+  const nearStar = p => ({ left: `calc(${(p.x * 100).toFixed(1)}vw - 150px)`, top: `calc(${(p.y * 100).toFixed(1)}vh - 26px)` })
+
   async function launch(e) {
     e.preventDefault()
     if (!q.trim() || (stage && stage !== 'done')) return
     setErr(''); setR(null); setPicked(0)
     sky.current?.reset()
-    setView('voyage'); setShipPos({ left: '12vw', top: '46vh' })
+    setView('voyage'); setShipPos({ left: '6vw', top: '52vh' })
     setStage('warp'); sky.current?.warp()
     let res
-    try { res = await (await fetch('/search?q=' + encodeURIComponent(q))).json() }
+    const fetching = fetch('/search?q=' + encodeURIComponent(q)).then(r => r.json())
+    // the ship tours while the warehouse works: broad sweeps across the field
+    setShipPos({ left: '28vw', top: '26vh' }); await sleep(1500)
+    setShipPos({ left: '52vw', top: '62vh' }); await sleep(1500)
+    try { res = await fetching }
     catch { abort('PIPELINE OFFLINE. START ui/server.py'); return }
     if (res.error) { abort(res.error); return }
     setR(res)
-    await sleep(1400)
-    setStage('axes'); sky.current?.cruise(); await sleep(1500)
+    setStage('axes'); sky.current?.cruise()
+    setShipPos({ left: '68vw', top: '30vh' }); await sleep(1600)
     if ((res.excluded || []).length) {
-      setStage('excl'); sky.current?.jettison(res.excluded); await sleep(2800)
+      setStage('excl'); sky.current?.jettison(res.excluded)
+      setShipPos({ left: '34vw', top: '54vh' }); await sleep(1500)
+      setShipPos({ left: '14vw', top: '38vh' }); await sleep(1400)
     }
     setStage('rank')
-    sky.current?.arrive(res.top)
-    await sleep(350 * res.top.length + 1500)
+    const pts = sky.current?.arrive(res.top) || []
+    // survey flyby: sweep to each contact as it blooms, then park at 01
+    for (const p of pts) { setShipPos(nearStar(p)); await sleep(760) }
+    await sleep(500)
+    if (pts[0]) setShipPos(nearStar(pts[0]))
     setStage('done')
   }
   function abort(msg) { setErr(msg); setStage(null); setView('landing'); sky.current?.reset() }
   function returnToBrief() { setStage(null); setR(null); sky.current?.reset(); setView('landing') }
   function pick(i) {
     setPicked(i)
-    const pts = sky.current?.contactPoints() || []
-    const p = pts.find(c => c.rank === i)
-    if (p) setShipPos({ left: `calc(${(p.x * 100).toFixed(1)}vw - 150px)`, top: `calc(${(p.y * 100).toFixed(1)}vh - 26px)` })
+    const p = (sky.current?.contactPoints() || []).find(c => c.rank === i)
+    if (p) setShipPos(nearStar(p))
   }
 
   const dish = R?.top?.[picked]
