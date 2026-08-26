@@ -29,14 +29,40 @@ const Sky = forwardRef(function Sky({ parallax }, ref) {
       cv.style.width = W + 'px'; cv.style.height = Hh + 'px'
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
-    resize(); addEventListener('resize', resize)
+    resize(); addEventListener('resize', () => { resize(); paintNebula() })
 
-    // 900 field stars, depth banded
-    stars.current = Array.from({ length: 900 }, (_, i) => ({
-      x: hash(i * 7 + 1), y: hash(i * 13 + 5),
-      z: 0.25 + hash(i * 31 + 9) * 0.75,          // depth: speed + brightness
-      tw: hash(i * 3) * Math.PI * 2,
-    }))
+    // 1100 field stars, depth banded, Hubble palette: blue-white clusters,
+    // warm whites, sparse amber giants
+    const TINTS = [[188,210,255],[236,233,226],[236,233,226],[255,196,140],[255,138,79]]
+    stars.current = Array.from({ length: 1100 }, (_, i) => {
+      const t = TINTS[Math.floor(hash(i * 41 + 3) * (hash(i*17)>0.85 ? 5 : 3))]
+      return {
+        x: hash(i * 7 + 1), y: hash(i * 13 + 5),
+        z: 0.25 + hash(i * 31 + 9) * 0.75,
+        tw: hash(i * 3) * Math.PI * 2, tint: t,
+      }
+    })
+
+    // nebula haze painted once to an offscreen layer: deep blue arms, one warm core
+    const neb = document.createElement('canvas')
+    const paintNebula = () => {
+      neb.width = W; neb.height = Hh
+      const nx = neb.getContext('2d')
+      const blob = (x, y, r, stops) => {
+        const g = nx.createRadialGradient(x, y, 0, x, y, r)
+        stops.forEach(([o, c]) => g.addColorStop(o, c))
+        nx.fillStyle = g; nx.fillRect(0, 0, W, Hh)
+      }
+      blob(W * 0.62, Hh * 0.38, Math.max(W, Hh) * 0.5,
+        [[0, 'rgba(255,190,120,0.10)'], [0.25, 'rgba(255,150,80,0.05)'], [1, 'rgba(0,0,0,0)']])
+      blob(W * 0.25, Hh * 0.7, Math.max(W, Hh) * 0.55,
+        [[0, 'rgba(90,130,210,0.09)'], [1, 'rgba(0,0,0,0)']])
+      blob(W * 0.85, Hh * 0.8, Math.max(W, Hh) * 0.4,
+        [[0, 'rgba(120,110,200,0.07)'], [1, 'rgba(0,0,0,0)']])
+      blob(W * 0.4, Hh * 0.15, Math.max(W, Hh) * 0.35,
+        [[0, 'rgba(80,120,190,0.07)'], [1, 'rgba(0,0,0,0)']])
+    }
+    paintNebula()
 
     const spark = (x, y, r, color, glow) => {
       ctx.save()
@@ -54,6 +80,7 @@ const Sky = forwardRef(function Sky({ parallax }, ref) {
 
     const loop = (t) => {
       ctx.clearRect(0, 0, W, Hh)
+      ctx.drawImage(neb, 0, 0)
       const pv = par.current
       const off = typeof pv?.get === 'function' ? pv.get() : 0
       const V = vel.current
@@ -64,13 +91,14 @@ const Sky = forwardRef(function Sky({ parallax }, ref) {
         if (V.v > 0.01) { s.x -= V.v * 0.011 * s.z; if (s.x < -0.05) { s.x += 1.1; s.y = Math.random() } }
         const x = s.x * W, y = s.y * Hh + (V.v > 0.01 ? 0 : off * s.z * 0.2)
         const a = (0.25 + 0.6 * s.z) * (0.6 + 0.4 * Math.sin(t / 900 + s.tw))
+        const [tr, tg, tb] = s.tint
         if (V.v > 0.05) {                        // warp streak
           const len = V.v * 90 * s.z
-          ctx.strokeStyle = `rgba(236,233,226,${a * 0.8})`
+          ctx.strokeStyle = `rgba(${tr},${tg},${tb},${a * 0.8})`
           ctx.lineWidth = s.z * 1.5
           ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len, y); ctx.stroke()
         } else {
-          ctx.fillStyle = `rgba(232,228,218,${a})`
+          ctx.fillStyle = `rgba(${tr},${tg},${tb},${a})`
           ctx.beginPath(); ctx.arc(x, y, 0.6 + s.z * 1.2, 0, 7); ctx.fill()
         }
       }

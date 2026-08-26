@@ -10,19 +10,19 @@ const fadeUp = {
 }
 
 const LOG = {
-  warp: 'UNDERWAY — PARSING CRAVING SIGNAL',
+  warp: 'UNDERWAY · PARSING CRAVING SIGNAL',
   axes: 'PLOTTING SENSORY AXES',
   excl: 'JETTISONING EXCLUDED CARGO',
-  rank: 'DECELERATING — FINAL APPROACH',
+  rank: 'DECELERATING · FINAL APPROACH',
 }
 
 const PHASES = [
   ['01', 'CARTOGRAPHY', 'Every dish is a star.',
-    'Cortex reads each unstructured recipe and charts its sensory coordinates — spicy 0.8, brothy 1.0 — with the exact ingredient lines kept as evidence. No evidence, no coordinate.'],
+    'Cortex reads each unstructured recipe and charts its sensory coordinates: spicy 0.8, brothy 1.0. The exact ingredient lines are kept as evidence. No evidence, no coordinate.'],
   ['02', 'SIGNAL', 'Say it like you feel it.',
     '“warm spicy soup, no shellfish” is not a keyword list. A live parser turns craving language into concepts, axes, and hard exclusions.'],
   ['03', 'JETTISON', 'No means no.',
-    'Embeddings cannot subtract — an anti-join can. Dishes carrying what you excluded are cut loose before ranking ever sees them. Measured: exclusion quality 0.245 → 0.855.'],
+    'Embeddings cannot subtract. An anti-join can. Dishes carrying what you excluded are cut loose before ranking ever sees them. Measured: exclusion quality 0.245 to 0.855.'],
 ]
 
 // blueprint-style probe, faces right; flame flickers
@@ -76,7 +76,7 @@ export default function App() {
     setStage('warp'); sky.current?.warp()
     let res
     try { res = await (await fetch('/search?q=' + encodeURIComponent(q))).json() }
-    catch { abort('PIPELINE OFFLINE — start ui/server.py'); return }
+    catch { abort('PIPELINE OFFLINE. START ui/server.py'); return }
     if (res.error) { abort(res.error); return }
     setR(res)
     await sleep(1400)
@@ -129,7 +129,7 @@ export default function App() {
                 alignItems: 'center', justifyContent: 'center', gap: 22, position: 'relative', zIndex: 2,
                 padding: '0 24px', textAlign: 'center' }}>
                 <div className="mono" style={{ fontSize: 12, letterSpacing: '0.28em', color: 'var(--dim)' }}>
-                  MISSION BRIEF — 386 HUMAN JUDGMENTS ON RECORD
+                  MISSION BRIEF · 386 HUMAN JUDGMENTS ON RECORD
                 </div>
                 <h1 style={{ fontSize: 'clamp(52px, 8.5vw, 118px)', fontWeight: 900, lineHeight: 0.98,
                   letterSpacing: '-0.02em', textTransform: 'uppercase' }}>
@@ -137,7 +137,7 @@ export default function App() {
                   <span className="accent">Five are dinner.</span>
                 </h1>
                 <p style={{ fontSize: 'clamp(16px, 1.8vw, 20px)', color: 'var(--dim)', maxWidth: 540 }}>
-                  Real recipes, charted by how they taste. Say what you crave — then fly out and find it.
+                  Real recipes, charted by how they taste. Say what you crave, then fly out and find it.
                 </p>
                 <div className="mono" style={{ position: 'absolute', bottom: 30, fontSize: 11,
                   letterSpacing: '0.3em', color: 'var(--dim)' }}>▼ BEGIN DESCENT</div>
@@ -187,8 +187,8 @@ export default function App() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
                 gap: 1, maxWidth: 1000, margin: '0 auto', background: 'var(--line)', border: '1px solid var(--line)' }}>
                 {[
-                  ['0.844', 'NDCG@5', 'enriched vectors + hard exclusion — measured winner of four arms'],
-                  ['3.5×', 'EXCLUSION', 'quality vs baseline, 0.245 → 0.855 — embeddings cannot subtract'],
+                  ['0.844', 'NDCG@5', 'enriched vectors + hard exclusion, the measured winner of four arms'],
+                  ['3.5×', 'EXCLUSION', 'quality vs baseline, 0.245 to 0.855. embeddings cannot subtract'],
                   ['21 MIN', '20K ENRICHED', 'full corpus for ≈$90, meter read before a dollar was spent'],
                   ['386', 'JUDGMENTS', 'blinded human grades behind every number on this page'],
                 ].map(([n, k, d], i) => (
@@ -200,6 +200,11 @@ export default function App() {
                   </motion.div>
                 ))}
               </div>
+              <p className="mono" style={{ textAlign: 'center', color: '#6b675f', fontSize: 10.5,
+                letterSpacing: '0.06em', marginTop: 40, lineHeight: 1.8 }}>
+                RECOMMENDATIONS ARE AI-EXTRACTED AND CAN MISS YOUR CRAVING · EXCLUSION IS A PREFERENCE
+                FILTER, NOT ALLERGY GUIDANCE · LIMITS ON RECORD IN PLAN.MD §V3
+              </p>
             </section>
           </motion.div>
         ) : (
@@ -223,7 +228,7 @@ export default function App() {
             {/* mission log */}
             <div style={{ position: 'fixed', left: 24, bottom: 24, zIndex: 4, maxWidth: '46vw' }}>
               <div className="mono" style={{ fontSize: 11, letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: 8 }}>
-                MISSION LOG — “{q}”
+                MISSION LOG · “{q}”
               </div>
               <AnimatePresence mode="wait">
                 {stage && stage !== 'done' && (
@@ -239,7 +244,7 @@ export default function App() {
                 {stage === 'done' && R && (
                   <motion.div key="arrived" className="mono" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                     style={{ fontSize: 'clamp(15px, 1.8vw, 20px)', letterSpacing: '0.12em' }}>
-                    <span className="accent">■</span> {R.top.length} CONTACTS ACQUIRED — SELECT TO APPROACH
+                    <span className="accent">■</span> {R.top.length} CONTACTS ACQUIRED · SELECT TO APPROACH
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -255,7 +260,7 @@ export default function App() {
                     backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ padding: '18px 22px 8px' }}>
                     <div className="mono" style={{ fontSize: 11, letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: 10 }}>
-                      CONTACTS — {R.top.length}
+                      CONTACTS · {R.top.length}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {R.top.map((d, i) => (
@@ -280,7 +285,7 @@ export default function App() {
                       <Sect>why it matched</Sect>
                       {!dish.edges.length && (
                         <p style={{ color: 'var(--accent)', fontSize: 14 }}>
-                          No sensory axis covers this craving — ranked by profile similarity alone, and logged as such.
+                          No sensory axis covers this craving. Ranked by profile similarity alone, and logged as such.
                         </p>
                       )}
                       {dish.edges.map(e => (
@@ -302,7 +307,7 @@ export default function App() {
                         </div>
                       ))}
                       {dish.ingredients?.length > 0 && (<>
-                        <Sect>manifest — ingredients</Sect>
+                        <Sect>manifest · ingredients</Sect>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                           {dish.ingredients.map((x, j) => (
                             <span key={j} className="mono" style={{ border: '1px solid var(--line)', borderRadius: 2,
@@ -321,6 +326,11 @@ export default function App() {
                           </div>
                         ))}
                       </>)}
+                      <div className="mono" style={{ marginTop: 22, borderTop: '1px solid var(--line)',
+                        paddingTop: 12, fontSize: 10.5, letterSpacing: '0.06em', color: '#6b675f', lineHeight: 1.7 }}>
+                        ADVISORY: MATCHES ARE AI-EXTRACTED AND CAN BE WRONG. INGREDIENT EXCLUSION IS A
+                        PREFERENCE FILTER, NOT ALLERGY OR MEDICAL GUIDANCE. READ THE RECIPE YOURSELF.
+                      </div>
                     </div>
                   )}
                 </motion.div>
