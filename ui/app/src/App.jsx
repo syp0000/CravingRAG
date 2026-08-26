@@ -4,14 +4,15 @@ import { useGSAP } from '@gsap/react'
 import Sky from './Sky.jsx'
 import About from './About.jsx'
 import Catalog from './Catalog.jsx'
+import { IS_PUBLIC, LIVE_URL, loadGallery, searchLive } from './api.js'
 
 gsap.registerPlugin(useGSAP)
 
 const LOG = {
   parse: 'PARSING CRAVING',
-  axes: 'MAPPING SENSORY AXES',
+  axes: 'PLOTTING SENSORY COORDINATES',
   excl: 'REMOVING EXCLUDED DISHES',
-  rank: 'RANKING',
+  rank: 'LOCKING FIVE DESTINATIONS',
 }
 
 const usePage = () => {
@@ -56,8 +57,11 @@ function Search() {
   const [rich, setRich] = useState('')
   const [avoid, setAvoid] = useState([])
   const [detailOpen, setDetailOpen] = useState(false)
+  const [gallery, setGallery] = useState([])
   const busy = stage && stage !== 'done'
   const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+  useEffect(() => { if (IS_PUBLIC) loadGallery().then(setGallery) }, [])
 
   // Each state has one scoped, reversible sequence so navigation stays predictable.
   useGSAP(() => {
@@ -94,19 +98,27 @@ function Search() {
       }, 'detail+=0.12')
   }, { dependencies: [picked, R, stage], scope: root, revertOnUpdate: true })
 
-  async function run(e) {
-    e.preventDefault()
-    if (!q.trim() || busy) return
+  // preset = a precomputed gallery entry {q, params, result}; absent = live free-text.
+  async function run(e, preset) {
+    e?.preventDefault()
+    if (busy) return
+    if (IS_PUBLIC && !preset) {
+      setErr(`This is the public gallery — pick a craving below. The live version takes any craving, by invite at ${LIVE_URL.replace(/^https?:\/\//, '')}`)
+      return
+    }
+    if (preset) {
+      setQ(preset.q)
+      setCuisines(preset.params?.cuisines || []); setAvoid(preset.params?.avoid || [])
+      setSpice(preset.params?.spice || ''); setRich(preset.params?.rich || '')
+    } else if (!q.trim()) return
     setErr(''); setR(null); setPicked(0); setDetailOpen(false); sky.current?.reset()
     setStage('parse')
-    const ps = new URLSearchParams({ q })
-    if (cuisines.length) ps.set('cuisine', cuisines.join(','))
-    if (avoid.length) ps.set('avoid', avoid.join(','))
-    if (spice) ps.set('spice', spice)
-    if (rich) ps.set('rich', rich)
     let res
-    try { res = await fetch('/search?' + ps).then(r => r.json()) }
-    catch { return fail('PIPELINE OFFLINE. START ui/server.py') }
+    if (preset) { await sleep(650); res = preset.result }   // let PARSING show; result is canned
+    else {
+      try { res = await searchLive(q, { cuisines, avoid, spice, rich }) }
+      catch { return fail('PIPELINE OFFLINE. START ui/server.py') }
+    }
     if (res.error) return fail(res.error)
     setR(res)
     setStage('axes'); await sleep(900)
@@ -123,7 +135,7 @@ function Search() {
 
   return (
     <div ref={root} className={`search-page ${stage === 'done' ? 'search-page--results' : ''}`}>
-      <CinematicBackdrop variant={stage === 'done' ? 'results' : 'landing'} quiet={Boolean(stage)} />
+      <CinematicBackdrop variant={stage ? 'results' : 'landing'} quiet={Boolean(stage)} />
       {stage !== 'done' && <Sky ref={sky} className={`search-sky ${stage ? 'search-sky--active' : ''}`} />}
 
       {/* The footage composes left; the search occupies its negative space on the right. */}
@@ -133,12 +145,12 @@ function Search() {
             onPick={selectDish} onEdit={clear} />
         ) : <>
           <div className="eyebrow mono">
-            <span className="status-dot" /> LIVE RETRIEVAL <span className="eyebrow-rule" /> 20,000 REAL RECIPES
+            <span className="status-dot" /> {IS_PUBLIC ? 'PRECOMPUTED GALLERY' : 'LIVE RETRIEVAL'} <span className="eyebrow-rule" /> 20,000 REAL RECIPES
           </div>
           <h1 className="hero-title">
             Search your <span className="accent">craving.</span>
           </h1>
-          <p className="hero-copy">Describe the feeling, flavor, or texture you want. We’ll find five real recipes and show the evidence behind every match.</p>
+          <p className="hero-copy">Your craving becomes a coordinate. Describe the feeling, flavor, or texture you want; we’ll navigate 20,000 real recipes and return five evidence-backed matches.{IS_PUBLIC && ' This public gallery replays real, precomputed results — the live version takes any craving, by invite.'}</p>
           <form onSubmit={run} className="search-bar liquid-glass">
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="a warm spicy soup, no shellfish" aria-label="craving"
               className="query-input" />
@@ -148,7 +160,21 @@ function Search() {
           </form>
           {err && <p className="mono" style={{ color: 'var(--accent)', marginTop: 14, fontSize: 13 }}>{err}</p>}
 
-          <details className="filters liquid-glass">
+          {IS_PUBLIC && gallery.length > 0 && (
+            <div style={{ marginTop: 18 }}>
+              <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.18em', color: '#6b675f', marginBottom: 9 }}>TRY A CRAVING</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                {gallery.map((g, i) => (
+                  <button key={i} type="button" onClick={() => run(null, g)} disabled={busy} className="mono"
+                    style={{ background: 'transparent', color: 'var(--dim)', border: '1px solid var(--line)', borderRadius: 2,
+                      padding: '7px 12px', fontSize: 12, letterSpacing: '0.02em', cursor: 'pointer', textAlign: 'left' }}>
+                    {g.label}
+                  </button>))}
+              </div>
+            </div>
+          )}
+
+          {!IS_PUBLIC && <details className="filters liquid-glass">
             <summary className="mono">
               <span>FINE-TUNE YOUR SEARCH</span>
               <span className="filter-summary-meta">{params.length ? `${params.length} ACTIVE` : 'OPTIONAL'} <span className="summary-plus">+</span></span>
@@ -171,7 +197,7 @@ function Search() {
                   <Chip key={a} on={avoid.includes(a)} onClick={() => setAvoid(v => v.includes(a) ? v.filter(x => x !== a) : [...v, a])}>{a}</Chip>))}
               </ParamRow>
             </div>
-          </details>
+          </details>}
 
           <div className="mono progress-log">
             {stage && <div className="progress-query">
@@ -255,7 +281,7 @@ function ResultsOverview({ query, params, results, picked, onPick, onEdit }) {
         <button type="button" onClick={onEdit} className="edit-search mono">← EDIT SEARCH</button>
       </div>
       {params.length > 0 && <div className="results-params mono">{params.join(' · ').toUpperCase()}</div>}
-      <p className="results-guide">Choose a result to inspect why it matched, then follow the recipe in the detail panel.</p>
+      <p className="results-guide">Five destinations found. Choose one to inspect why it matched, then follow the recipe in the detail panel.</p>
       <div className="ranked-results" aria-label="Ranked recipe results">
         {results.top.map((d, i) => (
           <button type="button" key={d.recipe_id} onClick={() => onPick(i)}
@@ -276,12 +302,26 @@ function ResultsOverview({ query, params, results, picked, onPick, onEdit }) {
 }
 
 const BACKDROPS = {
-  landing: { src: '/media/craving-space.mp4', poster: '/media/craving-space-poster.png' },
-  results: { src: '/media/results-gravity.mp4', poster: '/media/results-gravity-poster.png' },
+  landing: {
+    src: '/media/search-departure.mp4',
+    poster: '/media/search-departure-poster.png',
+    preload: 'auto',
+    loop: false,
+    holdAt: 7.2,
+    ambientDrift: true,
+  },
+  results: {
+    src: '/media/search-discovery.mp4',
+    poster: '/media/search-discovery-poster.png',
+    preload: 'auto',
+    loop: false,
+    twinkleTargets: true,
+    starRevealAt: 4.65,
+  },
   about: {
     src: '/media/about-celestial.mp4',
     poster: '/media/about-celestial-poster.png',
-    playbackRate: 0.85,
+    playbackRate: 0.8,
     preload: 'auto',
     seamless: true,
     overlap: 1.4,
@@ -293,12 +333,105 @@ function CinematicBackdrop({ variant = 'landing', quiet = false }) {
   return (
     <div className={`cinematic-backdrop cinematic-backdrop--${variant} ${quiet ? 'cinematic-backdrop--quiet' : ''}`} aria-hidden="true">
       {media.seamless ? <SeamlessVideo media={media} /> : (
-        <video key={media.src} autoPlay muted loop playsInline preload={media.preload ?? 'metadata'} poster={media.poster}>
-          <source src={media.src} type="video/mp4" />
-        </video>
+        <AmbientHoldVideo media={media} />
       )}
+      {media.twinkleTargets && <DestinationStars revealAt={media.starRevealAt} />}
       <div className="cinematic-vignette" />
       <div className="cinematic-grain" />
+    </div>
+  )
+}
+
+function AmbientHoldVideo({ media }) {
+  const root = useRef(null)
+  const video = useRef(null)
+
+  useGSAP((_, contextSafe) => {
+    const element = video.current
+    const rate = media.playbackRate ?? 1
+    let held = false
+
+    const applyRate = () => {
+      element.defaultPlaybackRate = rate
+      element.playbackRate = rate
+    }
+    const holdAstronaut = contextSafe(() => {
+      if (held || !media.holdAt || element.currentTime < media.holdAt) return
+      held = true
+      element.pause()
+      element.currentTime = media.holdAt
+
+      if (media.ambientDrift && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: 'sine.inOut' } })
+          .to(element, { scale: 1.028, xPercent: 0.45, yPercent: -0.3, duration: 7.5 })
+          .to(element, { scale: 1.016, xPercent: -0.2, yPercent: 0.18, duration: 6.5 })
+      }
+    })
+
+    element.addEventListener('loadedmetadata', applyRate)
+    element.addEventListener('timeupdate', holdAstronaut)
+    applyRate()
+
+    return () => {
+      element.removeEventListener('loadedmetadata', applyRate)
+      element.removeEventListener('timeupdate', holdAstronaut)
+      element.pause()
+    }
+  }, { scope: root, dependencies: [media] })
+
+  return (
+    <div ref={root} className="cinematic-single-video">
+      <video ref={video} key={media.src} autoPlay muted loop={media.loop ?? true} playsInline preload={media.preload ?? 'metadata'} poster={media.poster}>
+        <source src={media.src} type="video/mp4" />
+      </video>
+    </div>
+  )
+}
+
+const DESTINATION_POINTS = [
+  [47.1, 17.8],
+  [22.4, 29.7],
+  [32.2, 50.3],
+  [48.3, 71.3],
+  [17.2, 79.0],
+]
+
+function DestinationStars({ revealAt = 4.65 }) {
+  const root = useRef(null)
+
+  useGSAP(() => {
+    const stars = gsap.utils.toArray('.destination-star')
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduced) {
+      gsap.set(stars, { autoAlpha: 0.72, scale: 1 })
+      return
+    }
+
+    gsap.timeline({ defaults: { ease: 'power2.out' } })
+      .addLabel('destinations', revealAt)
+      .fromTo(stars,
+        { autoAlpha: 0, scale: 0.45 },
+        { autoAlpha: 0.95, scale: 1, duration: 0.55, stagger: 0.08 },
+        'destinations')
+
+    stars.forEach((star, index) => {
+      gsap.to(star, {
+        autoAlpha: 0.32 + index * 0.055,
+        scale: 0.7 + index * 0.035,
+        duration: 1.15 + index * 0.23,
+        delay: revealAt + 0.55 + index * 0.16,
+        repeat: -1,
+        yoyo: true,
+        ease: 'sine.inOut',
+      })
+    })
+  }, { scope: root, dependencies: [revealAt], revertOnUpdate: true })
+
+  return (
+    <div ref={root} className="destination-stars">
+      {DESTINATION_POINTS.map(([left, top], index) => (
+        <span key={index} className="destination-star" style={{ left: `${left}%`, top: `${top}%` }} />
+      ))}
     </div>
   )
 }

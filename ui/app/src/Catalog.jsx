@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { gapsApi } from './api.js'
 
 // Catalog Intelligence: the product decision, read straight from ANALYTICS.DEMAND_SUPPLY_GAPS
 // (sql/16). Demand is SYNTHETIC (data/demand_scenarios.yml); supply is the real catalog.
@@ -13,7 +14,7 @@ export default function Catalog() {
   const [err, setErr] = useState('')
   const [scenario, setScenario] = useState('phoenix_summer')
   useEffect(() => {
-    fetch('/gaps').then(r => r.json()).then(d => d.error ? setErr(d.error) : setD(d))
+    gapsApi().then(d => d.error ? setErr(d.error) : setD(d))
       .catch(() => setErr('PIPELINE OFFLINE. START ui/server.py'))
   }, [])
 
