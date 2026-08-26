@@ -1,0 +1,94 @@
+# ============================================================
+# demand_scenarios.yml — the synthetic search-demand assumptions, FROZEN.
+# ============================================================
+# Product decision this demo supports:
+#   "Which craving combinations have high search demand but insufficient menu
+#    supply, and what should we add next?"
+#
+# There is no real search traffic in this project. Every demand number the demo
+# shows is generated from THIS file by pipelines/generate_demo_demand.py, and every
+# event it produces is labeled source = 'synthetic_demo'. The supply side (dishes
+# matching an intent) is real: Cortex-extracted axes over the 19,260-dish catalog.
+#
+# Rule: do not adjust these assumptions after seeing the results. If a number below
+# changes, bump `version` and regenerate; the mart then carries the new version.
+#
+# Assumptions, explicitly:
+#   A1  Three scenarios with fixed shares of total traffic (sum = 1.0).
+#   A2  An intent is a named combination of sensory axes. `axes` gives the target
+#       per axis: 1.0 = "wants it" (dish must score >= 0.6), 0.0 = "wants it
+#       absent" (dish must score <= 0.35 or be unmeasured). Same thresholds as
+#       sql/13 "offers an axis" and the UI's light/rich dials.
+#   A3  Baseline traffic is comfort-heavy (warm/savory/rich), mirroring where the
+#       catalog is crowded (sql/13 ①). Shares are invented, not measured.
+#   A4  phoenix_summer shifts toward fresh/light/spicy. `other` draws from the
+#       baseline intent distribution.
+#   A5  dietary_access queries carry one exclusion each; the underlying intent is
+#       drawn from the baseline distribution. Exclusion keys match the canonical
+#       terms in V2.EXCLUSION_ALIASES (dairy_milk -> "dairy" + its aliases).
+#   A6  Phrasings inside an intent are repeated with Zipf-like frequency
+#       (weight 1/(rank+1)); timestamps are uniform over the 30-day window.
+#   A7  Timestamps are UTC, uniform over [window_end - 30d, window_end).
+#   A8  The generator authors intent_key + exclusion_key ("authored_intent"); what
+#       V2.PARSE_CRAVING actually understood is stored separately ("parsed_*").
+# ============================================================
+version: 1
+seed: 20260826
+window_end: 2026-08-25
+days: 30
+total_events: 3000
+
+intents:                       # A2 — target axes; the mart measures supply from these
+  fresh_spicy:     {fresh: 1.0, spicy: 1.0}
+  fresh_sweet:     {fresh: 1.0, sweet: 1.0}
+  light_savory:    {savory: 1.0, rich: 0.0}
+  warm_comforting: {warm: 1.0, comforting: 1.0}
+  warm_brothy:     {warm: 1.0, brothy: 1.0}
+  savory_rich:     {savory: 1.0, rich: 1.0}
+  rich_sweet:      {rich: 1.0, sweet: 1.0}
+
+phrasings:                     # ~3 per intent; dietary adds one exclusion suffix
+  fresh_spicy:     ["something fresh and spicy", "spicy salad with lots of lime", "bright, zesty, hot dish"]
+  fresh_sweet:     ["fresh and sweet", "light fruity dessert", "juicy sweet summer dish"]
+  light_savory:    ["light savory dinner, nothing heavy", "clean savory meal", "savory but not rich"]
+  warm_comforting: ["warm comforting food", "cozy dinner for a cold night", "something like grandma made"]
+  warm_brothy:     ["warm brothy soup", "hot soup with lots of broth", "noodle soup"]
+  savory_rich:     ["rich savory meal", "hearty and filling", "heavy savory dinner"]
+  rich_sweet:      ["rich sweet dessert", "indulgent chocolate treat", "decadent sweet thing"]
+
+exclusion_phrases:             # one phrasing per exclusion key (keeps uniques ~50)
+  dairy_milk: "no dairy"
+  peanut:     "no peanuts"
+  shellfish:  "no shellfish"
+  almond:     "no almonds"
+
+scenarios:
+  baseline:
+    share: 0.50
+    description: General search distribution
+    intents:                   # A3
+      warm_comforting: 0.25
+      savory_rich: 0.20
+      warm_brothy: 0.15
+      rich_sweet: 0.15
+      fresh_sweet: 0.10
+      light_savory: 0.08
+      fresh_spicy: 0.07
+
+  phoenix_summer:
+    share: 0.30
+    description: Increased demand for fresh, light, and spicy food
+    intents:                   # A4
+      fresh_spicy: 0.40
+      fresh_sweet: 0.25
+      light_savory: 0.20
+      other: 0.15
+
+  dietary_access:
+    share: 0.20
+    description: Searches containing dietary exclusions
+    exclusions:                # A5
+      dairy_milk: 0.45
+      peanut: 0.25
+      shellfish: 0.20
+      almond: 0.10

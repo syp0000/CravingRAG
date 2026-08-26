@@ -164,6 +164,52 @@ The UI's paths do not need separate construction — the scoring trace *is* the 
 That is what "every visible connection comes from Snowflake, not frontend decoration" means
 concretely.
 
+## 9. What ranks the live top-5: V1 vectors rank, V2 signals filter
+
+This is the one decision that was implemented but never written down in one place. The
+pieces were scattered across `ui/server.py`, `provenance/architecture.py`, `README.md`, and
+`eval/results_v2.md`, each dropping a different half. The complete statement:
+
+**Live `/search` top-5 = ranked by V1 profile-vector cosine similarity, then V2 signals
+applied only as filters (never as the score).** Concretely, in order:
+
+1. **Hard exclusion** (fail-closed, §6): drop rows matching excluded ingredients/aliases.
+2. **Component + dial filters**: drop rows the extracted V2 axes rule out (spice/rich dials,
+   component match). These use the axes for what §5-6 said they are for: evidence, not rank.
+3. **Ranking**: `ORDER BY VECTOR_COSINE_SIMILARITY(V1.RECIPE_PROFILES.profile_vec, query_vec)
+   DESC`, walk the candidates, stop at 5.
+
+Implementation: the full pipeline is `ui/server.py` search() — docstring `server.py:11-13`,
+exclusion `:87-92`, component `:102-104`, dial filters `:112-125`, ranking `:127-136`, the
+literal `== 5` cut `:139-154`. The V2 axis-scoring implementation (`sql/11_v2_scoring.sql`,
+`EVAL2.V2_RUNS`) exists only as an eval arm and is never read by the server.
+
+**Why V1 ranks and V2 only filters.** Measured on the 342-recipe dev corpus, NDCG@5:
+
+| arm | NDCG@5 |
+|---|---|
+| A_raw_vector | 0.582 |
+| V2_structured (axis-sum ranker) | 0.698 |
+| V1_baseline | 0.732 |
+| **V1_excluded (live)** | **0.844** |
+
+The V2 structured ranker scored *below* plain V1. It wins on individual queries where the
+craving is an intensity the axes measure (q03 "rich comforting" 1.00, q13 "comforting w/o
+almonds" 1.00), but collapses when the query's key noun has no axis (q06 "savory noodle soup"
+0.07, q15 "rich chocolate dessert" 0.32). Per §3, the axes express *intensity, not identity*.
+So the axes earn their place as the exclusion's evidence and the constellation explanation,
+not as the ranker. Full arm/category breakdown: `eval/results_v2.md`.
+
+**Parked: a query-type router (V2 for "abstract/comforting", V1 otherwise).** Tempting from
+the q03/q05/q13 wins, but not adopted, for two reasons. (a) At the category level V2 *loses*
+the sensory bucket (0.648 vs V1 0.798), because the same sensory category holds both its wins
+and its collapses (q06, q02) — the "abstract" label does not separate them. (b) The only
+supporting evidence is 3 of 15 queries, quoted as prose; the per-query x per-arm NDCG matrix
+is not committed anywhere. Precondition before revisiting: dump that matrix from
+`sql/12_pooled_eval.sql` and confirm the V2-winning queries share an *axis-nameable* pattern.
+Until then, routing would be built on the exact failure mode (identity vs intensity) that V2
+already lost to.
+
 ---
 
 ## Still open
