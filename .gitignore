@@ -12,3 +12,6 @@ data/*
 !data/curation_list.csv
 .obsidian/
 wiki/.obsidian/
+
+# synthetic demand assumptions are hand-authored provenance, not dataset rows
+!data/demand_scenarios.yml

@@ -2,9 +2,11 @@
 
 One stdlib HTTP server, two endpoints:
   GET /            → ui/app/dist (the React build; `npm run build` in ui/app)
+  GET /media/…     → public/media videos and posters, same dist
   GET /catalog     → all recipes (id, title) for the star field
   GET /diagrams/…  → archify diagrams from docs/diagrams (About page embed)
   GET /why?id=…    → the decision record + its causal chain, as a page
+  GET /gaps        → ANALYTICS.DEMAND_SUPPLY_GAPS (sql/16) for the Catalog page
   GET /search?q=…  → runs the REAL pipeline for an arbitrary craving:
                      ① V2.PARSE_CRAVING (live Cortex call)
                      ② exclusion needles = parsed terms + V2.EXCLUSION_ALIASES
@@ -12,6 +14,7 @@ One stdlib HTTP server, two endpoints:
                         + hard exclusion + component filter; NDCG@5 0.844 on the
                         342-recipe dev corpus — the 20k live corpus is not re-judged)
                      ④ axis evidence for the top dishes from V2.RECIPE_SIGNALS
+                     ⑤ one row into ANALYTICS.SEARCH_EVENTS, source = live_demo
 The frozen-parse rule applies to EVAL only; the product parses live.
 
 Usage:  .venv/bin/python ui/server.py   → http://localhost:8642
@@ -179,7 +182,39 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
         result["decision_id"] = RECORDER.record(recommendation_record(result, rejected, considered, needles))
     except Exception as e:
         print(f"decision not recorded: {e}", file=sys.stderr)
+    try:   # demand side: this real search becomes one ANALYTICS.SEARCH_EVENTS row (source=live_demo)
+        record_search_event(text, concepts, axes, excludes)
+    except Exception as e:
+        print(f"search event not recorded: {e}", file=sys.stderr)
     return result
+
+
+def record_search_event(text, concepts, axes, excludes):
+    """Same schema the synthetic generator writes (sql/15), labeled live_demo. No
+    scenario, no authored intent: nobody authored a real person's craving."""
+    q("""INSERT INTO ANALYTICS.SEARCH_EVENTS
+         SELECT UUID_STRING(), CURRENT_TIMESTAMP(), %s, NULL, NULL,
+                PARSE_JSON(%s), PARSE_JSON(%s), PARSE_JSON(%s)::array,
+                ANALYTICS.CANDIDATE_COUNT(PARSE_JSON(%s), PARSE_JSON(%s)::array),
+                'live_demo', NULL, NULL""",
+      (text, json.dumps(concepts), json.dumps(axes), json.dumps(excludes),
+       json.dumps(axes), json.dumps(excludes)))
+
+
+def gaps():
+    """Catalog Intelligence: the mart (sql/16) plus how much live traffic exists."""
+    cols = ["scenario_id", "intent_key", "search_count", "demand_share", "matching_dishes",
+            "supply_share", "opportunity_index", "avg_candidate_count", "low_coverage_rate",
+            "demand_source", "generator_version", "seed"]
+    rows = q(f"SELECT {', '.join(cols)} FROM ANALYTICS.DEMAND_SUPPLY_GAPS ORDER BY opportunity_index DESC")
+    live = q("""SELECT COUNT(*), MIN(candidate_count), ROUND(AVG(candidate_count))
+                FROM ANALYTICS.SEARCH_EVENTS WHERE source='live_demo'""")[0]
+    defs = q("SELECT intent_key, target_axes, matching_dishes, catalog_size FROM ANALYTICS.INTENT_DEFS ORDER BY matching_dishes")
+    return {"gaps": [dict(zip(cols, (float(v) if hasattr(v, "as_integer_ratio") else v for v in r))) for r in rows],
+            "intents": [{"intent_key": k, "target_axes": json.loads(t), "matching_dishes": int(m), "catalog_size": int(n)}
+                        for k, t, m, n in defs],
+            "live": {"searches": int(live[0]), "min_candidates": live[1] and int(live[1]),
+                     "avg_candidates": live[2] and int(live[2])}}
 
 
 def why_page(rec_id):
@@ -245,11 +280,13 @@ class H(BaseHTTPRequestHandler):
         try:
             if u.path == "/":
                 self.send_file(dist / "index.html", "text/html; charset=utf-8")
-            elif u.path.startswith("/assets/"):
+            elif u.path.startswith(("/assets/", "/media/")) or u.path in ("/favicon.svg", "/icons.svg"):
+                # everything Vite copies into dist: hashed bundles, public/media videos, icons
                 f = (dist / u.path.lstrip("/")).resolve()
                 if not f.is_relative_to(dist.resolve()) or not f.is_file():
                     return self.send_json({"error": "not found"}, 404)
-                ctype = {"js": "text/javascript", "css": "text/css"}.get(f.suffix.lstrip("."), "application/octet-stream")
+                ctype = {"js": "text/javascript", "css": "text/css", "mp4": "video/mp4", "png": "image/png",
+                         "svg": "image/svg+xml"}.get(f.suffix.lstrip("."), "application/octet-stream")
                 self.send_file(f, ctype)
             elif u.path.startswith("/diagrams/"):     # archify HTML from docs/diagrams
                 f = (ROOT.parent / "docs" / "diagrams" / u.path[len("/diagrams/"):]).resolve()
@@ -266,6 +303,8 @@ class H(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+            elif u.path == "/gaps":
+                self.send_json(gaps())
             elif u.path == "/catalog":
                 rows = q("SELECT recipe_id, title FROM raw.curated_recipes ORDER BY recipe_id")
                 self.send_json([{"recipe_id": int(r), "title": t.strip()} for r, t in rows])

@@ -71,3 +71,46 @@ SELECT * FROM SEMANTIC_VIEW(V2.SENSORY_CATALOG
 ORDER BY 2 DESC;
 -- 2026-08-22: uncurated 18,930 dishes / 1,076 spicy / 230 fresh+spicy — the
 -- underrepresented-combination story, measured.
+
+-- ------------------------------------------------------------
+-- ④ Demand → Supply → Decision (added 2026-08-26, after sql/15 + sql/16)
+--    The catalog view above answers "what do we offer?". This one answers the
+--    product question: "what do people ask for that we do not offer enough of?"
+--    Demand rows are SYNTHETIC (data/demand_scenarios.yml, labeled per row);
+--    supply rows are the real Cortex-extracted catalog. Analyst questions:
+--      "Which intent has the highest opportunity index in phoenix_summer?"
+--      "How many searches for fresh spicy food were there per scenario?"
+--      "What is the supply share of fresh_spicy?"
+-- ------------------------------------------------------------
+CREATE OR REPLACE VIEW ANALYTICS.DEMAND_SUPPLY_GAPS_ROWS AS
+SELECT scenario_id || '/' || intent_key AS gap_id, * FROM ANALYTICS.DEMAND_SUPPLY_GAPS;
+
+CREATE OR REPLACE SEMANTIC VIEW ANALYTICS.DEMAND_SUPPLY
+  TABLES (
+    gaps AS ANALYTICS.DEMAND_SUPPLY_GAPS_ROWS PRIMARY KEY (gap_id)
+      WITH SYNONYMS ('demand supply gaps','opportunities','menu gaps')
+      COMMENT = 'One row per (scenario, craving intent). search_count/demand_share are SYNTHETIC demo traffic from data/demand_scenarios.yml; matching_dishes/supply_share are real catalog measurements'
+  )
+  FACTS (
+    gaps.search_count AS search_count, gaps.demand_share AS demand_share,
+    gaps.matching_dishes AS matching_dishes, gaps.supply_share AS supply_share,
+    gaps.opportunity_index AS opportunity_index,
+    gaps.avg_candidate_count AS avg_candidate_count, gaps.low_coverage_rate AS low_coverage_rate
+  )
+  DIMENSIONS (
+    gaps.scenario_id AS scenario_id WITH SYNONYMS ('scenario','traffic scenario','season'),
+    gaps.intent_key AS intent_key WITH SYNONYMS ('intent','craving combination','craving'),
+    gaps.demand_source AS demand_source WITH SYNONYMS ('data source')
+  )
+  METRICS (
+    gaps.total_searches AS SUM(search_count) WITH SYNONYMS ('searches','search volume'),
+    gaps.max_opportunity AS MAX(opportunity_index) WITH SYNONYMS ('biggest gap','highest opportunity'),
+    gaps.dishes AS MAX(matching_dishes) WITH SYNONYMS ('supply','menu supply')
+  )
+  COMMENT = 'Demand vs supply per craving intent. opportunity_index = demand_share / supply_share, above 1 means searched for more than the menu offers. Demand is synthetic demo data, supply is real.';
+
+-- 2026-08-26: phoenix_summer / fresh_spicy on top at 34.2 (42.7% of demand vs 1.25% of catalog).
+SELECT * FROM SEMANTIC_VIEW(ANALYTICS.DEMAND_SUPPLY
+    METRICS gaps.total_searches, gaps.max_opportunity
+    DIMENSIONS gaps.scenario_id, gaps.intent_key)
+ORDER BY 2 DESC LIMIT 5;

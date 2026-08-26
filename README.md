@@ -5,14 +5,10 @@
 > *"warm spicy soup, no shellfish"* → the sky of 20,000 recipes narrows to five, and every
 > match shows the exact ingredient lines that earned it.
 
-CravingRAG is a **retrieval study with an explanation layer**, built Snowflake-native. It
-started with a question left over from a previous project (PantryAI): an LLM can *generate*
-a recipe that satisfies every requested ingredient and still feel implausible — so instead
-of asking AI to invent food, can we *retrieve* real recipes that match what someone feels
-like eating? Answering that honestly turned out to mean measuring how representation, query
-semantics, and constraints fail in semantic retrieval — and building controlled fixes.
-
-One sensory data model feeds two experiences:
+CravingRAG **structures an unstructured recipe catalog once, so that consumer search and
+business analysis use the same data product.** Built Snowflake-native: Cortex reads each
+recipe where it lives and writes eight sensory axes plus the ingredient line that proves
+each one, as ordinary columns. One extraction, one table, two customers.
 
 ```
                     Sensory data model
@@ -21,9 +17,24 @@ One sensory data model feeds two experiences:
             ┌──────────────┴──────────────┐
             ▼                             ▼
      Consumer experience            Business intelligence
-   "what should I eat?"          "what does our catalog offer?"
-   constellation UI, live         semantic view + Cortex Analyst
+   "what should I eat?"          "what do people ask for that
+   constellation UI, live          we do not offer enough of?"
+   ranked, explained,             semantic view, Cortex Analyst,
+   allergen fails closed          demand-supply mart, menu decision
 ```
+
+It did not start as a data product. It started as a **retrieval study with an explanation
+layer**, from a question left over from a previous project (PantryAI): an LLM can
+*generate* a recipe that satisfies every requested ingredient and still feel implausible,
+so instead of asking AI to invent food, can we *retrieve* real recipes that match what
+someone feels like eating? Answering that honestly meant measuring how representation,
+query semantics, and constraints fail in semantic retrieval, and building controlled fixes.
+The measurement below is that study. It worked, but a search box that returns five dishes
+is a feature, and a feature does not need a warehouse. The reason for Snowflake only showed
+up when the same extracted axes were read the other way round, as "which cravings does this
+catalog fail to serve": nothing was re-extracted, the columns written for search already
+were the analytics ([sql/13](sql/13_catalog_insights.sql) to
+[sql/16](sql/16_demand_supply_mart.sql)).
 
 Project history, including the 2026-08 adversarial-review hardening pass:
 [PROGRESS.md](PROGRESS.md).
@@ -99,13 +110,33 @@ The extraction that powers search is also a semantic layer
 the axis columns, with synonyms and metrics, so **Cortex Analyst** turns a product
 question into SQL nobody writes:
 
-> *"How many dishes satisfy fresh + spicy?"* → **230 of 19,260 (1.2%)** — while warm/savory
+> *"How many dishes satisfy fresh + spicy?"* → **240 of 19,260 (1.25%)** — while warm/savory
 > comfort food is half the catalog. The underserved-combination finding is one
 > natural-language question away.
 
-More catalog findings (all real data, no behavioral data invented):
+More catalog findings (all real data):
 [sql/13_catalog_insights.sql](sql/13_catalog_insights.sql) — the catalog skews hard to
 comfort food (warm 70%, spicy 6%), and a dairy-free customer loses **63%** of it.
+
+**Demand → supply → decision.** Supply alone cannot say whether 240 is too few. There is
+no real search traffic in this project, so demand is declared, not observed: three
+scenarios with every assumption in one file ([data/demand_scenarios.yml](data/demand_scenarios.yml)),
+a seeded generator ([pipelines/generate_demo_demand.py](pipelines/generate_demo_demand.py),
+3,000 events, 49 phrasings, each parsed once by the real parser) writing to
+`ANALYTICS.SEARCH_EVENTS` ([sql/15](sql/15_demand_events.sql)) with `source =
+'synthetic_demo'` on every row, and a mart ([sql/16](sql/16_demand_supply_mart.sql)):
+
+```sql
+SELECT * FROM ANALYTICS.DEMAND_SUPPLY_GAPS ORDER BY opportunity_index DESC;
+-- phoenix_summer / fresh_spicy: 42.7% of demand vs 1.25% of catalog → 34× under-supplied
+```
+
+`opportunity_index = demand_share / supply_share`. The **Catalog** page in the UI renders
+that table; a second semantic view (`ANALYTICS.DEMAND_SUPPLY`) exposes it to Cortex
+Analyst. Real `/search` calls are recorded as `source = 'live_demo'` and kept out of the
+ratios. The generator records what it *meant* (`authored_intent`) separately from what the
+parser *understood* (`parsed_axes`); their disagreement is a free parser-quality measurement
+(the parser reads "hot dish" as temperature).
 
 ## Decision provenance (optional notebook)
 
@@ -148,9 +179,9 @@ agreement number but for the direction of its errors (systematic over-exclusion)
 
 ## Architecture
 
-[![CravingRAG system data flow](docs/diagrams/system.png)](docs/diagrams/system.html)
+[![CravingRAG system data flow](docs/diagrams/craving-pipeline.png)](docs/diagrams/craving-pipeline.html)
 
-*Interactive version: open [`docs/diagrams/system.html`](docs/diagrams/system.html) locally (archify; source in `system.dataflow.json`).*
+*Interactive version: open [`docs/diagrams/craving-pipeline.html`](docs/diagrams/craving-pipeline.html) locally (archify; source in `craving-pipeline.dataflow.json`).*
 
 ## Stack
 
@@ -158,11 +189,33 @@ Python (`dlt`, `pandas`, stdlib HTTP server) · Snowflake (`AI_COMPLETE`, `AI_EM
 `VECTOR`, VARIANT, semantic views, Cortex Analyst) · evaluation: frozen queries, pooled
 blinded judgments, NDCG@5 / P@5 / pooled recall. No external LLM API, no separate vector DB.
 
-## Data and license
+## Data, credits, and licenses
 
-The corpus derives from **RecipeNLG** (Poznań University of Technology) — non-commercial
-research/educational use. The source CSV and all generated extracts stay local
-(`data/*` gitignored except the hand-authored `data/curation_list.csv`).
+**Data.** The corpus derives from **RecipeNLG** (Poznań University of Technology), licensed
+for non-commercial research/educational use. The source CSV and all generated extracts stay
+local (`data/*` gitignored except the hand-authored `data/curation_list.csv` and
+`data/demand_scenarios.yml`). Search demand in `ANALYTICS.SEARCH_EVENTS` is synthetic,
+generated from that yml, and labeled `source = 'synthetic_demo'` on every row.
+
+**Third-party code and tools this project uses.** All code written here is by Siyeon Park;
+the pieces below are other people's work, used under their licenses.
+
+| what | used for | author | license |
+|---|---|---|---|
+| [GSAP](https://gsap.com) 3.15 + `@gsap/react` | page transitions, constellation and results motion (`ui/app`) | GreenSock / Webflow | [GSAP Standard License](https://gsap.com/standard-license) (no charge) |
+| [gsap-skills](https://github.com/greensock/gsap-skills) | agent guidance while writing the GSAP code above | GreenSock | MIT |
+| [archify](https://github.com/tt-a1i/archify) 2.16 | the pipeline diagram (`docs/diagrams/craving-pipeline.html`, rendered from `.dataflow.json`) | tt-a1i, based on Cocoon AI's architecture-diagram-generator | MIT |
+| [Semantica](https://github.com/semantica-agi/semantica) | optional decision-graph backend behind `CRAVING_DECISIONS=semantica` (see Decision provenance) | semantica-agi | MIT |
+| React, Vite | UI build | Meta, Evan You and contributors | MIT |
+| `dlt`, `snowflake-connector-python`, `pandas`, PyYAML | loading, Snowflake access, data handling | respective authors | Apache-2.0 / BSD / MIT |
+| Snowflake Cortex (`AI_COMPLETE`, `AI_EMBED`, Cortex Analyst) | enrichment, embeddings, semantic layer | Snowflake | Snowflake terms of service |
+
+Background footage under `ui/app/public/media` (three mp4 + posters): source and license
+TODO, fill in before publishing.
+
+**This repository's own license.** No `LICENSE` file yet. Until one exists the code is all
+rights reserved by default, and the RecipeNLG-derived data stays non-commercial regardless
+of what the code license ends up being.
 
 ## Setup
 
@@ -176,7 +229,8 @@ Pipeline order: `pipelines/curate.py` → `pipelines/load_curated.py` →
 `sql/06`–`08` (enrichment) → `pipelines/compile_wiki.py` → `sql/09` (parser) →
 `pipelines/load_frozen_parses.py` (⚠️ before 10–12: they read `EVAL2.V2_PARSED`) →
 `sql/10`–`12` (exclusion, scoring, pooled eval) → `sql/13`–`14` (insights,
-semantic view) → `ui/server.py`. Scale-up: `pipelines/scale_corpus.py` (meter-first — read
+semantic view) → `sql/15` → `pipelines/generate_demo_demand.py` → `sql/16` (demand
+events, synthetic demand, demand-supply mart; rerun `sql/14` ④ after) → `ui/server.py`. Scale-up: `pipelines/scale_corpus.py` (meter-first — read
 PLAN.md §Weekend 5+ before spending).
 
 ## Checks

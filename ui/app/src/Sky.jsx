@@ -9,13 +9,16 @@ function hash(n) {
   return (n >>> 0) / 4294967295
 }
 
-const Sky = forwardRef(function Sky({ dimmed = false }, ref) {
+const Sky = forwardRef(function Sky({ dimmed = false, showLabels = true, className = '' }, ref) {
   const canvasRef = useRef(null)
   const stars = useRef([])
   const contacts = useRef([])      // {x,y,rank,label,alpha}
   const ribbon = useRef(0)
   const dim = useRef(dimmed)
-  dim.current = dimmed
+  const labels = useRef(showLabels)
+
+  useEffect(() => { dim.current = dimmed }, [dimmed])
+  useEffect(() => { labels.current = showLabels }, [showLabels])
 
   useEffect(() => {
     const cv = canvasRef.current
@@ -30,7 +33,7 @@ const Sky = forwardRef(function Sky({ dimmed = false }, ref) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       paintNebula()
     }
-    const TINTS = [[188, 210, 255], [236, 233, 226], [236, 233, 226], [255, 196, 140], [255, 138, 79]]
+    const TINTS = [[188, 210, 255], [236, 233, 226], [236, 233, 226], [174, 205, 242], [139, 185, 235]]
     stars.current = Array.from({ length: 900 }, (_, i) => ({
       x: hash(i * 7 + 1), y: hash(i * 13 + 5),
       z: 0.25 + hash(i * 31 + 9) * 0.75,
@@ -47,7 +50,7 @@ const Sky = forwardRef(function Sky({ dimmed = false }, ref) {
         stops.forEach(([o, c]) => g.addColorStop(o, c))
         nx.fillStyle = g; nx.fillRect(0, 0, W, Hh)
       }
-      blob(W * 0.62, Hh * 0.38, Math.max(W, Hh) * 0.5, [[0, 'rgba(255,190,120,0.08)'], [1, 'rgba(0,0,0,0)']])
+      blob(W * 0.62, Hh * 0.38, Math.max(W, Hh) * 0.5, [[0, 'rgba(145,185,235,0.08)'], [1, 'rgba(0,0,0,0)']])
       blob(W * 0.25, Hh * 0.7, Math.max(W, Hh) * 0.55, [[0, 'rgba(90,130,210,0.08)'], [1, 'rgba(0,0,0,0)']])
     }
     resize(); addEventListener('resize', resize)
@@ -70,7 +73,7 @@ const Sky = forwardRef(function Sky({ dimmed = false }, ref) {
       if (contacts.current.length > 1 && ribbon.current > 0) {
         ribbon.current = Math.min(1, ribbon.current + 0.012)
         const pts = contacts.current, total = (pts.length - 1) * ribbon.current
-        ctx.save(); ctx.strokeStyle = 'rgba(255,79,0,.5)'; ctx.setLineDash([2, 9]); ctx.lineWidth = 1.5
+        ctx.save(); ctx.strokeStyle = 'rgba(156,199,240,.5)'; ctx.setLineDash([2, 9]); ctx.lineWidth = 1.5
         ctx.beginPath(); ctx.moveTo(pts[0].x * W, pts[0].y * Hh)
         for (let i = 1; i < pts.length; i++) {
           const seg = Math.min(1, Math.max(0, total - (i - 1)))
@@ -84,9 +87,9 @@ const Sky = forwardRef(function Sky({ dimmed = false }, ref) {
         c.alpha = Math.min(1, c.alpha + 0.02)
         const x = c.x * W, y = c.y * Hh
         spark(x, y, (12 - c.rank * 1.2) * c.alpha, `rgba(244,241,232,${c.alpha})`)
-        if (c.alpha > 0.6) {
+        if (c.alpha > 0.6 && labels.current) {
           ctx.save(); ctx.font = '600 13px "IBM Plex Mono", Menlo, monospace'
-          ctx.fillStyle = `rgba(255,79,0,${c.alpha})`; ctx.fillText(String(c.rank + 1).padStart(2, '0'), x + 18, y + 5)
+          ctx.fillStyle = `rgba(156,199,240,${c.alpha})`; ctx.fillText(String(c.rank + 1).padStart(2, '0'), x + 18, y + 5)
           ctx.fillStyle = `rgba(236,233,226,${c.alpha})`; ctx.fillText(c.label.toUpperCase(), x + 44, y + 5)
           ctx.restore()
         }
@@ -115,7 +118,7 @@ const Sky = forwardRef(function Sky({ dimmed = false }, ref) {
     },
   }))
 
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />
+  return <canvas ref={canvasRef} className={className} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />
 })
 
 export default Sky
