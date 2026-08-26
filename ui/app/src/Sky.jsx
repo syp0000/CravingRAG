@@ -64,7 +64,7 @@ const Sky = forwardRef(function Sky({ parallax }, ref) {
       // ribbon under the stars
       if (ribbon.current.length > 1) {
         ctx.save()
-        ctx.strokeStyle = 'rgba(255,179,92,.6)'
+        ctx.strokeStyle = 'rgba(255,79,0,.55)'
         ctx.setLineDash([2, 9]); ctx.lineWidth = 1.6; ctx.lineCap = 'round'
         ctx.beginPath()
         ribbon.current.forEach(([rx, ry], i) => {
@@ -81,14 +81,14 @@ const Sky = forwardRef(function Sky({ parallax }, ref) {
           const e = 1 - Math.pow(1 - s.prog, 3)
           x = (s.x + (s.tx - s.x) * e) * W
           y = (s.y + (s.ty - s.y) * e) * Hh + off * 0.15
-          spark(x, y, 13 - s.rank * 1.4, '#fff6ec', true)
+          spark(x, y, 12 - s.rank * 1.3, '#f4f1e8', true)
           if (s.prog > 0.85 && s.label) {
             ctx.save()
-            ctx.font = '600 15px Sora, Verdana, sans-serif'
-            ctx.fillStyle = 'rgba(255,179,92,.95)'
-            ctx.fillText(s.rank + 1 + ' ·', x + 20, y + 5)
-            ctx.fillStyle = 'rgba(244,242,251,.95)'
-            ctx.fillText(s.label, x + 44, y + 5)
+            ctx.font = '600 13px "IBM Plex Mono", Menlo, monospace'
+            ctx.fillStyle = 'rgba(255,79,0,.95)'
+            ctx.fillText(String(s.rank + 1).padStart(2,'0'), x + 20, y + 5)
+            ctx.fillStyle = 'rgba(236,233,226,.95)'
+            ctx.fillText(s.label.toUpperCase(), x + 46, y + 5)
             ctx.restore()
           }
           continue
@@ -96,21 +96,21 @@ const Sky = forwardRef(function Sky({ parallax }, ref) {
         if (s.mode === 'dead') {
           s.prog = Math.min(1, s.prog + 0.012)
           const a = s.prog < 0.25 ? 1 : Math.max(0.04, 1 - (s.prog - 0.25) / 0.6)
-          spark(x, y, s.r + 1.6, `rgba(255,92,130,${a})`, s.prog < 0.4)
+          spark(x, y, s.r + 1.6, `rgba(255,79,0,${a})`, s.prog < 0.4)
           if (s.label && s.prog < 0.45) {
             ctx.save()
-            ctx.font = '600 12px Manrope, sans-serif'
-            ctx.fillStyle = `rgba(255,140,165,${1 - s.prog * 2})`
-            ctx.fillText(s.label, x + 8, y - 8)
+            ctx.font = '500 11px "IBM Plex Mono", Menlo, monospace'
+            ctx.fillStyle = `rgba(255,110,60,${1 - s.prog * 2})`
+            ctx.fillText(('− ' + s.label).toUpperCase(), x + 8, y - 8)
             ctx.restore()
           }
           continue
         }
         const twk = 0.55 + 0.45 * Math.sin(t / 900 + s.tw)
         const a = (s.mode === 'dim' ? 0.16 : 0.85) * twk * s.alpha
-        if (s.r > 2) spark(x, y, s.r + 1.2, `rgba(255,233,201,${a})`, false)
+        if (s.r > 2) spark(x, y, s.r + 1.2, `rgba(240,236,226,${a})`, false)
         else {
-          ctx.fillStyle = `rgba(230,225,255,${a})`
+          ctx.fillStyle = `rgba(224,220,210,${a})`
           ctx.beginPath(); ctx.arc(x, y, s.r, 0, 7); ctx.fill()
         }
       }
