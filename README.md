@@ -25,6 +25,9 @@ One sensory data model feeds two experiences:
    constellation UI, live         semantic view + Cortex Analyst
 ```
 
+Project history, including the 2026-08 adversarial-review hardening pass:
+[PROGRESS.md](PROGRESS.md).
+
 ## The result (measured, not claimed)
 
 Four retrieval arms, one blinded human-judged pool (386 judgments over the union of every
@@ -44,7 +47,9 @@ Each gap measures one thing:
   *"without almonds"*. Rewriting recipes into sensory profiles before embedding is the
   project's original claim, finally measured against a control.
 - **Hard exclusion is the biggest lever** (+0.112 overall; exclusion-query NDCG 0.245 →
-  0.855): embeddings cannot subtract, an anti-join can.
+  0.855): embeddings cannot subtract, an anti-join can. Caveat, measured: with only 15
+  queries the paired bootstrap CI on this delta crosses zero ([-0.009, +0.271], see
+  `eval/confidence.py`); the enrichment gap is significant, this one needs more queries.
 - **Structured axis scoring loses the ranking war and wins its real jobs.** It collapses
   when a query's key noun has no axis (*"savory NOODLE soup"* 0.07 — the axes express
   intensity, not identity), but it powers the exclusion's evidence and the entire
@@ -65,6 +70,10 @@ themselves (embedding coverage grows with corpus size), and a new failure class 
 (beverages flooding "refreshing" — the curated 342 had no drinks; a random 19.7k does).
 Details in [PLAN.md](PLAN.md) §Weekend 5+.
 
+**Scope of the numbers:** every metric above was judged on the 342-recipe dev corpus. The
+20k live corpus has not been re-judged, and the beverage failure above is direct evidence
+the scores don't transfer unchanged — treat 0.844 as a dev-corpus result, not a live one.
+
 ## Consumer side — the constellation
 
 ```bash
@@ -78,7 +87,10 @@ a constellation with verbatim evidence in the side card (*spicy 0.8 ← "10 Thai
 peppers, seeded and minced"*). Ranking uses the measured winner (profile vectors +
 exclusion); the axes explain. The UI renders scored rows and invents nothing.
 
-`ui/constellation_static.html` is the offline fallback (the 15 eval queries, no server).
+The UI is the React app in `ui/app` (served built by `server.py`; `npm run dev` in
+`ui/app` for the Vite dev server), two pages: **Search** and **About** (what the project
+does, the pipeline diagram from `docs/diagrams/`, process done, measured results). Motion is
+GSAP, kept quiet. Earlier skies live in `archive/`.
 
 ## Business side — the same axes as dimensions
 
@@ -95,6 +107,36 @@ More catalog findings (all real data, no behavioral data invented):
 [sql/13_catalog_insights.sql](sql/13_catalog_insights.sql) — the catalog skews hard to
 comfort food (warm 70%, spicy 6%), and a dairy-free customer loses **63%** of it.
 
+## Decision provenance (optional notebook)
+
+Every `/search` writes one decision record: query, parsed preferences, exclusion needles,
+how many candidates were looked at, which were rejected and why (`excluded:cream`,
+`component`, `duplicate_title`), the five picked with their evidence, and a `causes` link
+to the architecture decision that put the exclusion filter there. Architecture decisions
+themselves are records too (`provenance/architecture.py`: eval result → finding →
+decision → V2), so one trace runs from a served dish back to the measurement.
+
+The app talks to a `DecisionRecorder` interface (`provenance/recorder.py`), never to a
+vendor. `CRAVING_DECISIONS` picks the notebook: `jsonl` (default, stdlib,
+`data/decisions.jsonl`), `off`, or `semantica`. Recording failures are logged, never
+surfaced: a broken notebook cannot break a search.
+
+```bash
+.venv/bin/python -m provenance.architecture          # record the V1→V2 chain once
+.venv/bin/python -m provenance.recorder list          # everything recorded
+.venv/bin/python -m provenance.recorder trace <id>    # walk causes back to the root
+.venv/bin/pytest provenance -v
+```
+
+**Why Semantica is an adapter, not the default.** It was evaluated for exactly this
+layer (decision records + causal links, `semantica.context.ContextGraph`). Its API fits
+the record shape, but `pip install semantica` pulls torch, transformers, spaCy, OpenCV
+and more (1.8 GB measured), imports in ~40 s, and in 0.6.6 its own
+`trace_decision_chain` does not survive a save/load cycle. The two things this project
+needs from a provenance store, append a record and walk `causes`, are stdlib work. So
+Semantica stays behind the flag for experiments (`pip install semantica` in a separate
+venv, `CRAVING_DECISIONS=semantica`), and retrieval stays entirely in Snowflake.
+
 ## Honest limits (deliberately deferred, tracked in [PLAN.md](PLAN.md) §v3)
 
 Single annotator (test-retest κw 0.624 on 29 re-judged pairs); 15 dev-set queries written
@@ -106,29 +148,9 @@ agreement number but for the direction of its errors (systematic over-exclusion)
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    CSV["RecipeNLG CSV · 2.23M<br/>local, never committed"]
-    CURATE["pipelines/curate.py + scale_corpus.py<br/>342 curated + 19,658 sampled"]
-    RAW[("RAW.CURATED_RECIPES · 20k")]
-    V1[("V1.RECIPE_PROFILES<br/>sensory text + vector")]
-    SIG[("V2.RECIPE_SIGNALS<br/>8 axes + evidence, NULL without evidence")]
-    WIKI["wiki/*.md (Obsidian)<br/>concept → axis weights"]
-    SW[("V2.SENSORY_WIKI")]
-    EXCL[("V2.EXCLUDED_PAIRS<br/>fail-closed, alias-expanded")]
-    RANK["winner arm: vector ranking<br/>+ exclusion + component filter"]
-    UI["ui/ constellation<br/>renders scored rows only"]
-    SEM[("V2.SENSORY_CATALOG<br/>semantic view")]
-    AN["Cortex Analyst<br/>NL → SQL"]
+[![CravingRAG system data flow](docs/diagrams/system.png)](docs/diagrams/system.html)
 
-    CSV --> CURATE --> RAW
-    RAW --> V1 --> RANK
-    RAW --> SIG
-    WIKI --> SW --> RANK
-    SIG --> UI
-    SIG --> SEM --> AN
-    EXCL --> RANK --> UI
-```
+*Interactive version: open [`docs/diagrams/system.html`](docs/diagrams/system.html) locally (archify; source in `system.dataflow.json`).*
 
 ## Stack
 
@@ -151,8 +173,9 @@ cp .dlt/example.secrets.toml .dlt/secrets.toml   # key-pair auth; see comments i
 ```
 
 Pipeline order: `pipelines/curate.py` → `pipelines/load_curated.py` →
-`sql/06`–`08` (enrichment) → `pipelines/compile_wiki.py` → `sql/09`–`12` (parser, exclusion,
-scoring, pooled eval) → `pipelines/load_frozen_parses.py` → `sql/13`–`14` (insights,
+`sql/06`–`08` (enrichment) → `pipelines/compile_wiki.py` → `sql/09` (parser) →
+`pipelines/load_frozen_parses.py` (⚠️ before 10–12: they read `EVAL2.V2_PARSED`) →
+`sql/10`–`12` (exclusion, scoring, pooled eval) → `sql/13`–`14` (insights,
 semantic view) → `ui/server.py`. Scale-up: `pipelines/scale_corpus.py` (meter-first — read
 PLAN.md §Weekend 5+ before spending).
 
@@ -173,5 +196,8 @@ pipelines/ curate · load_curated · scale_corpus · compile_wiki · load_frozen
 wiki/     craving concepts, axis weights in frontmatter (Obsidian vault)
 eval/     queries.yml · JUDGING.md · judgments.csv (386, with provenance)
           parses_frozen.csv · results_baseline.md · results_v2.md
-ui/       server.py (live) · live.html (constellation) · constellation_static.html (fallback)
+          confidence.py (bootstrap CIs) · make_pool_20k.py (blinded live-corpus pool)
+ui/       server.py (live pipeline API) · app/ (React constellation)
+provenance/ recorder (interface, jsonl, semantica) · recommendation · architecture · tests
+archive/  superseded: DESIGN.md, V1 search, first loaders, earlier UIs
 ```

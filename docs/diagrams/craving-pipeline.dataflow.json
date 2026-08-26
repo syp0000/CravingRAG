@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "CravingRAG: craving text to recipes with evidence",
+    "viewBox": [
+      1080,
+      740
+    ],
+    "quality_profile": "showcase"
+  },
+  "stages": [
+    {
+      "label": "Ask"
+    },
+    {
+      "label": "Understand"
+    },
+    {
+      "label": "Filter"
+    },
+    {
+      "label": "Rank"
+    },
+    {
+      "label": "Show"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "query",
+      "type": "frontend",
+      "label": "Craving text",
+      "sublabel": "warm spicy soup",
+      "stage": 0,
+      "row": 0,
+      "tag": "no shellfish"
+    },
+    {
+      "id": "parser",
+      "type": "backend",
+      "label": "PARSE_CRAVING",
+      "sublabel": "concepts + exclusions",
+      "stage": 1,
+      "row": 0,
+      "tag": "AI_COMPLETE"
+    },
+    {
+      "id": "exclusion",
+      "type": "security",
+      "label": "Hard exclusion",
+      "sublabel": "anti-join, fail closed",
+      "stage": 2,
+      "row": 0,
+      "tag": "aliases"
+    },
+    {
+      "id": "rank",
+      "type": "backend",
+      "label": "Vector ranking",
+      "sublabel": "cosine, no components",
+      "stage": 3,
+      "row": 0,
+      "tag": "top 5"
+    },
+    {
+      "id": "ui",
+      "type": "frontend",
+      "label": "Constellation UI",
+      "sublabel": "scored rows only",
+      "stage": 4,
+      "row": 0,
+      "tag": "evidence shown"
+    },
+    {
+      "id": "raw",
+      "type": "database",
+      "label": "RAW.CURATED_RECIPES",
+      "sublabel": "20k from RecipeNLG",
+      "stage": 0,
+      "row": 2,
+      "tag": "non-commercial"
+    },
+    {
+      "id": "profiles",
+      "type": "database",
+      "label": "V1.RECIPE_PROFILES",
+      "sublabel": "sensory text + vector",
+      "stage": 1,
+      "row": 2,
+      "tag": "AI_EMBED"
+    },
+    {
+      "id": "signals",
+      "type": "database",
+      "label": "V2.RECIPE_SIGNALS",
+      "sublabel": "8 axes + evidence",
+      "stage": 1,
+      "row": 4,
+      "tag": "NULL w/o evidence"
+    }
+  ],
+  "flows": [
+    {
+      "from": "query",
+      "to": "parser",
+      "label": "craving",
+      "classification": "live",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "parser",
+      "to": "exclusion",
+      "label": "exclude terms",
+      "classification": "open vocabulary",
+      "variant": "security",
+      "route": "straight"
+    },
+    {
+      "from": "exclusion",
+      "to": "rank",
+      "label": "survivors",
+      "classification": "hard filter",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "rank",
+      "to": "ui",
+      "label": "top 5",
+      "classification": "ranked",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "raw",
+      "to": "profiles",
+      "label": "sensory profile",
+      "classification": "LLM rewrite",
+      "variant": "default",
+      "route": "straight",
+      "labelAt": [
+        207,
+        340
+      ]
+    },
+    {
+      "from": "raw",
+      "to": "signals",
+      "label": "axis extraction",
+      "classification": "evidence or NULL",
+      "variant": "default",
+      "labelAt": [
+        250,
+        520
+      ]
+    },
+    {
+      "from": "profiles",
+      "to": "rank",
+      "label": "profile vectors",
+      "classification": "cosine",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [
+        [
+          637.5,
+          385
+        ],
+        [
+          637.5,
+          260
+        ],
+        [
+          745,
+          260
+        ]
+      ],
+      "labelAt": [
+        500,
+        372
+      ]
+    },
+    {
+      "from": "signals",
+      "to": "ui",
+      "label": "axis evidence",
+      "classification": "explain only",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "via": [
+        [
+          852.5,
+          613
+        ],
+        [
+          852.5,
+          260
+        ],
+        [
+          960,
+          260
+        ]
+      ],
+      "labelAt": [
+        600,
+        600
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Measured, not claimed",
+      "items": [
+        "Four arms, one blinded pool, 386 human grades",
+        "Winner: vectors + hard exclusion, NDCG@5 0.844 (342-recipe dev set)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "No means no",
+      "items": [
+        "Pure vectors scored 0.245 on exclusion queries",
+        "Anti-join before ranking: 0.855; unverifiable absence is a miss"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Axes explain, vectors rank",
+      "items": [
+        "Every axis score keeps its verbatim ingredient line",
+        "Each search leaves a traceable decision record"
+      ]
+    }
+  ]
+}

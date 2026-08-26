@@ -1,19 +1,24 @@
 """CravingRAG demo server — free-text craving → live Snowflake pipeline → JSON.
 
 One stdlib HTTP server, two endpoints:
-  GET /            → ui/live.html
+  GET /            → ui/app/dist (the React build; `npm run build` in ui/app)
   GET /catalog     → all recipes (id, title) for the star field
+  GET /diagrams/…  → archify diagrams from docs/diagrams (About page embed)
+  GET /why?id=…    → the decision record + its causal chain, as a page
   GET /search?q=…  → runs the REAL pipeline for an arbitrary craving:
                      ① V2.PARSE_CRAVING (live Cortex call)
                      ② exclusion needles = parsed terms + V2.EXCLUSION_ALIASES
                      ③ ranking = the measured winner arm (V1 profile vectors
-                        + hard exclusion + component filter; NDCG@5 0.844)
+                        + hard exclusion + component filter; NDCG@5 0.844 on the
+                        342-recipe dev corpus — the 20k live corpus is not re-judged)
                      ④ axis evidence for the top dishes from V2.RECIPE_SIGNALS
 The frozen-parse rule applies to EVAL only; the product parses live.
 
 Usage:  .venv/bin/python ui/server.py   → http://localhost:8642
 """
+import html
 import json
+import sys
 import tomllib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,6 +27,11 @@ from urllib.parse import parse_qs, urlparse
 import snowflake.connector
 
 ROOT = Path(__file__).parent
+sys.path.insert(0, str(ROOT.parent))
+from provenance.recommendation import recommendation_record  # noqa: E402
+from provenance.recorder import get_recorder                 # noqa: E402
+
+RECORDER = get_recorder()   # CRAVING_DECISIONS=off|jsonl|semantica (default jsonl)
 EMBED = "snowflake-arctic-embed-l-v2.0"
 COMPONENT_RE_ANY = r".*\\b(paste|marinade|rub|seasoning|wrappers?|batter)\\b.*"
 COMPONENT_RE_END = (r".*\\b(sauce|dressing|glaze|stock|broth|ketchup|mustard|mayonnaise|mayo|"
@@ -43,13 +53,15 @@ CONN = connect()
 
 
 def q(sql, params=None):
+    # one retry on a fresh connection — covers dead cursors AND dead executes
     global CONN
     try:
         cur = CONN.cursor()
+        cur.execute(sql, params or ())
     except Exception:
         CONN = connect()
-        cur = cur = CONN.cursor()
-    cur.execute(sql, params or ())
+        cur = CONN.cursor()
+        cur.execute(sql, params or ())
     return cur.fetchall()
 
 
@@ -120,14 +132,21 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
         JOIN V2.RECIPE_SIGNALS s USING (recipe_id)
         CROSS JOIN (SELECT AI_EMBED('{EMBED}', %s) AS qv) e
         WHERE TRUE {conds}
-        ORDER BY sim DESC""", (embed_text,))
-    ranked, seen = [], set()
+        ORDER BY sim DESC
+        LIMIT 200""", (embed_text,))
+    # ponytail: 200 candidates for a top-5 after dedupe/exclusion/component drops;
+    # raise if a heavy-exclusion query ever returns fewer than 5
+    ranked, seen, rejected, considered = [], set(), [], 0
     for rid, title, sim in top:
         rid = int(rid)
+        considered += 1
         # UI-only dedupe by normalized title (Siyeon's call): three "Hot And Sour Soup"
         # stars tell the viewer nothing — eval keeps every row, the sky keeps one per name
         name = " ".join(title.lower().split())
-        if rid in excl or comp.get(rid) or name in seen:
+        why = (f"excluded:{excl[rid]}" if rid in excl else "component" if comp.get(rid)
+               else "duplicate_title" if name in seen else None)
+        if why:
+            rejected.append({"recipe_id": rid, "title": title.strip(), "sim": float(sim), "why": why})
             continue
         seen.add(name)
         ranked.append({"recipe_id": rid, "title": title.strip(), "sim": float(sim)})
@@ -150,12 +169,53 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
                 d["directions"] = json.loads(dirs)
             except Exception:
                 d["ingredients"], d["directions"] = [], []
-    return {"query": text, "concepts": concepts, "excludes": excludes,
-            "params": {"cuisines": cuisines or [], "spice": spice, "rich": rich},
-            "axes": [{"axis": a, "target": t} for a, t in sorted(axes.items())],
-            "excluded": [{"recipe_id": r, "matched": m} for r, m in excl.items()],
-            "components": [r for r, c in comp.items() if c],
-            "top": ranked}
+    result = {"query": text, "concepts": concepts, "excludes": excludes,
+              "params": {"cuisines": cuisines or [], "spice": spice, "rich": rich},
+              "axes": [{"axis": a, "target": t} for a, t in sorted(axes.items())],
+              "excluded": [{"recipe_id": r, "matched": m} for r, m in excl.items()],
+              "components": [r for r, c in comp.items() if c],
+              "top": ranked}
+    try:   # provenance is a side note; a broken notebook must never break a search
+        result["decision_id"] = RECORDER.record(recommendation_record(result, rejected, considered, needles))
+    except Exception as e:
+        print(f"decision not recorded: {e}", file=sys.stderr)
+    return result
+
+
+def why_page(rec_id):
+    """One decision, human-readable: the chain it followed from, then the record."""
+    rec = RECORDER.get(rec_id)
+    if rec is None:
+        return None
+    e = html.escape
+    chain = RECORDER.trace(rec_id)
+    out = ["<!doctype html><meta charset=utf-8><title>why · CravingRAG</title>",
+           "<style>body{background:#0a0b0e;color:#d8d8d8;font:14px/1.5 ui-monospace,Menlo,monospace;"
+           "max-width:900px;margin:40px auto;padding:0 20px}h2{color:#e8b04b;font-size:13px;letter-spacing:.2em}"
+           "li{margin:4px 0}.dim{color:#777}.no{color:#e05a5a}.ok{color:#6cc47a}pre{white-space:pre-wrap;color:#999}</style>",
+           f"<h1 style='font-size:16px'>WHY · {e(rec_id)}</h1>",
+           "<h2>CHAIN (root first)</h2><ol>"]
+    out += [f"<li><span class=dim>[{e(r['kind'])}]</span> {e(r['summary'])}"
+            + (f"<br><span class=dim>{e(r['reasoning'])}</span>" if r.get("reasoning") else "") + "</li>" for r in chain]
+    out.append("</ol>")
+    if rec.get("kind") == "recommendation":
+        pref, con = rec["preferences"], rec["constraints"]
+        out += [f"<h2>QUERY</h2><p>{e(rec['query'])}</p>",
+                f"<h2>PREFERENCES</h2><p>concepts: {e(', '.join(pref['concepts']) or 'none (vector fallback)')}"
+                f"<br>axes: {e(', '.join(f'{a['axis']} {a['target']}' for a in pref['axes']) or 'none')}</p>",
+                f"<h2>CONSTRAINTS</h2><p>excludes: {e(', '.join(con['excludes']) or 'none')}"
+                f"<br>needles searched: {e(', '.join(con['needles']) or 'none')}</p>",
+                f"<h2>CANDIDATES · {rec['candidates_considered']} looked at, {len(rec['rejected'])} rejected</h2><ul>"]
+        out += [f"<li class=no>✗ {e(r['title'])} <span class=dim>sim {r['sim']} · {e(r['why'])}</span></li>" for r in rec["rejected"]]
+        out.append("</ul><h2>SELECTED</h2><ol>")
+        for d in rec["selected"]:
+            ev = "".join(f"<br><span class=dim>{e(x['axis'])} {x['value']} ← “{e((x['evidence'] or ['no evidence'])[0])}”</span>"
+                         for x in (d.get("edges") or []))
+            out.append(f"<li class=ok>{e(d['title'])} <span class=dim>sim {d['sim']}</span>{ev}</li>")
+        out.append(f"</ol><h2>OUTCOME</h2><p>{e(rec['outcome'])} · confidence {rec['confidence']} "
+                   f"<span class=dim>({e(rec['confidence_basis'])})</span></p>")
+    out.append(f"<h2>RAW</h2><pre>{e(json.dumps(rec, indent=1, ensure_ascii=False))}</pre>")
+    return "".join(out)
 
 
 class H(BaseHTTPRequestHandler):
@@ -170,11 +230,37 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_file(self, path, ctype):
+        body = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", "no-cache")   # hashed assets change on every build
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         u = urlparse(self.path)
+        dist = ROOT / "app" / "dist"
         try:
             if u.path == "/":
-                body = (ROOT / "live.html").read_bytes()
+                self.send_file(dist / "index.html", "text/html; charset=utf-8")
+            elif u.path.startswith("/assets/"):
+                f = (dist / u.path.lstrip("/")).resolve()
+                if not f.is_relative_to(dist.resolve()) or not f.is_file():
+                    return self.send_json({"error": "not found"}, 404)
+                ctype = {"js": "text/javascript", "css": "text/css"}.get(f.suffix.lstrip("."), "application/octet-stream")
+                self.send_file(f, ctype)
+            elif u.path.startswith("/diagrams/"):     # archify HTML from docs/diagrams
+                f = (ROOT.parent / "docs" / "diagrams" / u.path[len("/diagrams/"):]).resolve()
+                if f.suffix != ".html" or not f.is_relative_to((ROOT.parent / "docs" / "diagrams").resolve()) or not f.is_file():
+                    return self.send_json({"error": "not found"}, 404)
+                self.send_file(f, "text/html; charset=utf-8")
+            elif u.path == "/why":
+                page = why_page((parse_qs(u.query).get("id") or [""])[0])
+                if page is None:
+                    return self.send_json({"error": "unknown decision id"}, 404)
+                body = page.encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
