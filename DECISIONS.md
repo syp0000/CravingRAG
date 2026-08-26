@@ -212,6 +212,28 @@ already lost to.
 
 ---
 
+## 10. Deployment: one gated image, credentials from env, no shared secret
+
+The demo ships as a **single Docker image** ([Dockerfile](Dockerfile)): a Node stage builds
+the React app, a Python stage serves that build and the live API from the same `server.py`
+process. `server.py` already served `ui/app/dist` next to the endpoints, so one process is
+the honest deploy unit, not a separate static host plus an API host.
+
+Credentials moved to `SNOWFLAKE_*` env vars with the key-pair private key as **inline PEM**
+([ui/server.py](ui/server.py) `_connect_kwargs`). The deployed host has no
+`.dlt/secrets.toml`; reading that file stays as the local-dev fallback only. Nothing secret
+enters the image or the repo.
+
+Private access is **Cloudflare Access** (email one-time code), not a shared token. Two
+reasons the token lost: (a) a public repo has nowhere to hide a token, and a static JS
+bundle exposes anything the browser sends, so a URL or bundle token is not really secret;
+(b) Access is identity-based, so there is no secret to leak at all. The gate is also **cost
+control**, not only privacy: every `/search` is a live Cortex call against a running
+warehouse, so an open URL is an open credit meter. Render free tier is accepted with its one
+honest cost, a ~30-60s cold start after idle, mostly hidden behind the Access email step.
+
+---
+
 ## Still open
 
 - How the LLM converts ingredients into a numeric axis value (0–1? ordinal buckets?), and

@@ -103,6 +103,22 @@ The UI is the React app in `ui/app` (served built by `server.py`; `npm run dev` 
 does, the pipeline diagram from `docs/diagrams/`, process done, measured results). Motion is
 GSAP, kept quiet. Earlier skies live in `archive/`.
 
+## Deployment (private demo)
+
+The whole demo is one Docker image ([Dockerfile](Dockerfile)): a Node stage compiles the
+React app, a Python stage serves that build and the live API from the same stdlib process.
+Runtime deps are just `snowflake-connector-python` ([requirements-deploy.txt](requirements-deploy.txt));
+Snowflake credentials come from `SNOWFLAKE_*` env vars with the key-pair private key as
+inline PEM, so no secret file ships in the image (`server.py` reads the local
+`.dlt/secrets.toml` only when those env vars are absent).
+
+Hosted on Render (free tier) behind a Cloudflare-proxied custom domain with **Cloudflare
+Access** in front, so the URL is private: only allowlisted emails get in, via a one-time
+code sent to their inbox (the visitor needs no account). The gate is also cost control, not
+just privacy, because every `/search` is a real Cortex call against a live warehouse. One
+free-tier caveat, stated honestly: the instance sleeps when idle, so the first hit after a
+lull takes ~30-60s to wake (the Access email-code step hides most of that wait).
+
 ## Business side — the same axes as dimensions
 
 The extraction that powers search is also a semantic layer
@@ -187,7 +203,8 @@ agreement number but for the direction of its errors (systematic over-exclusion)
 
 Python (`dlt`, `pandas`, stdlib HTTP server) · Snowflake (`AI_COMPLETE`, `AI_EMBED`,
 `VECTOR`, VARIANT, semantic views, Cortex Analyst) · evaluation: frozen queries, pooled
-blinded judgments, NDCG@5 / P@5 / pooled recall. No external LLM API, no separate vector DB.
+blinded judgments, NDCG@5 / P@5 / pooled recall · deploy: Docker, Render, Cloudflare Access.
+No external LLM API, no separate vector DB.
 
 ## Data, credits, and licenses
 

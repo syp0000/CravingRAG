@@ -265,6 +265,18 @@ The original plan, kept for the method:
 Full 2.23M is embedding-only territory — signals enrichment scales linearly (~2.7B tokens
 for the full set) and does not fit a trial.
 
+## Weekend 6 — Deployment (private demo)
+
+**EXECUTED 2026-08-26.** The measured system is live behind a gated private URL, not only a
+local `server.py`. One Docker image ([Dockerfile](Dockerfile)) builds the React app and
+serves it with the live API from one process; Snowflake credentials come from `SNOWFLAKE_*`
+env vars (inline PEM key), so no secret file ships in the image (local dev still reads
+`.dlt/secrets.toml`). Hosted on Render (free tier); custom domain `cravingrag.com` proxied
+through Cloudflare with **Cloudflare Access** in front, so only allowlisted emails enter via
+a one-time email code. The gate is also cost control: every `/search` is a live Cortex call
+against a running warehouse. Honest cost of the free tier: ~30-60s cold start after idle,
+mostly hidden by the Access email step. See DECISIONS §10 and README "Deployment".
+
 ## v3 — what the 2026-08-17 outside review asked for, deferred on purpose
 
 Recorded here so the README can point at it instead of pretending the gaps do not exist.
