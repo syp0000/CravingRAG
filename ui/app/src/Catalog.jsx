@@ -30,13 +30,17 @@ export default function Catalog() {
   return (
     <div style={{ position: 'relative', zIndex: 2, maxWidth: 960, margin: '0 auto', padding: '110px 28px 120px' }}>
       <div className="mono" style={{ fontSize: 12, letterSpacing: '0.26em', color: 'var(--dim)', marginBottom: 14 }}>CATALOG INTELLIGENCE</div>
+      <div className="mono" style={{ fontSize: 11.5, letterSpacing: '0.06em', lineHeight: 1.7, color: '#e8b04b', border: '1px solid rgba(232,176,75,.35)', borderRadius: 4, padding: '10px 14px', marginBottom: 22, maxWidth: 680 }}>
+        DEMO DATA — NO REAL PEOPLE SEARCHED HERE YET.<br />
+        The “cravings” you see on this page come from 3,000 AI-generated search scenarios based on assumptions in data/demand_scenarios.yml.<br />
+        The catalog, however, contains real recipe data.
+      </div>
       <h1 style={{ marginBottom: 12 }}>What people ask for <span className="editorial-emphasis">that the menu does not offer.</span></h1>
       <p style={{ fontSize: 17, color: 'var(--dim)', maxWidth: 680, marginBottom: 18 }}>
         One question: what do people keep asking for that we barely have, so what should we add next?
       </p>
       <p style={{ fontSize: 15.5, color: 'var(--dim)', maxWidth: 680, marginBottom: 36, lineHeight: 1.7 }}>
-        The recipe counts are real. The searches are not: I do not have real users yet, so I generated 3,000 example
-        searches with AI for this demo, split into three situations you can switch between below.
+        What we have (supply) is counted from the real catalog. What people crave (demand) is generated, in three situations. Pick one:
       </p>
 
       {err && <p className="mono" style={{ color: 'var(--accent)' }}>{err}</p>}
@@ -89,9 +93,7 @@ export default function Catalog() {
           </tbody>
         </table>
         <p style={{ fontSize: 15, color: 'var(--dim)', maxWidth: 680, marginTop: 18, lineHeight: 1.7 }}>
-          <b style={{ color: 'var(--ink)' }}>demand</b>: how often people searched for it. <b style={{ color: 'var(--ink)' }}>supply</b>: how much of
-          the catalog can serve it. <b style={{ color: 'var(--ink)' }}>opportunity</b>: demand divided by supply. 34× means people ask for it 34
-          times more than we have it. Blue bar: we need more of this. Grey bar: we already have enough.
+          <b style={{ color: 'var(--ink)' }}>opportunity</b> = demand ÷ supply. 34× means asked for 34 times more than we have it. Blue: add more. Grey: enough already.
         </p>
         <p className="mono" style={{ fontSize: 11, color: '#6b675f', marginTop: 12, letterSpacing: '0.04em', lineHeight: 1.7 }}>
           DEMAND: SYNTHETIC_DEMO v{top?.generator_version} SEED {top?.seed}, 3,000 EVENTS OVER 30 DAYS FROM data/demand_scenarios.yml.
