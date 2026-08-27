@@ -22,5 +22,8 @@ def recommendation_record(result, rejected, n_considered, needles):
         # honest: cosine similarity of the winner, not a calibrated probability
         "confidence": top[0]["sim"] if top else None,
         "confidence_basis": "top-1 profile-vector cosine similarity, uncalibrated",
-        "causes": ["arch:v2-hybrid"] + (["arch:hard-exclusion"] if result["excludes"] else []),
+        "causes": ["arch:v2-hybrid"] + (["arch:hard-exclusion"] if result["excludes"] else [])
+        # quality-layer rejections cite the V3 decision that put those rules there
+        + (["arch:lean-v3"] if any(r["why"].startswith(("format_mismatch", "identity_mismatch",
+                                                        "duplicate_dish")) for r in rejected) else []),
     }

@@ -24,6 +24,7 @@ import html
 import json
 import os
 import sys
+import threading
 import tomllib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -60,7 +61,9 @@ def _connect_kwargs():
             account=os.environ["SNOWFLAKE_ACCOUNT"], user=os.environ["SNOWFLAKE_USER"],
             warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "CRAVING_WH"),
             database=os.environ.get("SNOWFLAKE_DATABASE", "CRAVING_RAG"),
-            role=os.environ.get("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
+            # least-privilege by default: sql/17_app_role.sql creates CRAVING_APP
+            # (read + one INSERT + Cortex). Never default a public server to ACCOUNTADMIN.
+            role=os.environ.get("SNOWFLAKE_ROLE", "CRAVING_APP"),
             private_key=key.private_bytes(serialization.Encoding.DER,
                 serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
         return base
@@ -81,19 +84,25 @@ def connect():
 
 
 CONN = connect()
+CONN_LOCK = threading.Lock()   # one connection shared by all handler threads
+                               # (ThreadingHTTPServer): the connector is not safe
+                               # for concurrent cursors on one connection.
+# ponytail: global lock serializes DB access; switch to a connection pool if
+# concurrent traffic ever matters more than the ~1s per-connection setup.
 
 
 def q(sql, params=None):
     # one retry on a fresh connection — covers dead cursors AND dead executes
     global CONN
-    try:
-        cur = CONN.cursor()
-        cur.execute(sql, params or ())
-    except Exception:
-        CONN = connect()
-        cur = CONN.cursor()
-        cur.execute(sql, params or ())
-    return cur.fetchall()
+    with CONN_LOCK:
+        try:
+            cur = CONN.cursor()
+            cur.execute(sql, params or ())
+        except Exception:
+            CONN = connect()
+            cur = CONN.cursor()
+            cur.execute(sql, params or ())
+        return cur.fetchall()
 
 
 def search(text, cuisines=None, avoid=None, spice=None, rich=None):
