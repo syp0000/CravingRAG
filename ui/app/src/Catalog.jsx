@@ -3,10 +3,15 @@ import { gapsApi } from './api.js'
 
 // Catalog Intelligence: the product decision, read straight from ANALYTICS.DEMAND_SUPPLY_GAPS
 // (sql/16). Demand is SYNTHETIC (data/demand_scenarios.yml); supply is the real catalog.
+// Three made-up situations. None of this is real traffic: I wrote the shares in
+// data/demand_scenarios.yml before running anything and did not change them after.
 const SCENARIOS = {
-  baseline: 'General search distribution',
-  phoenix_summer: 'Fresh, light, spicy (summer)',
-  dietary_access: 'Searches with a dietary exclusion',
+  baseline: ['Normal day',
+    'Searches for everyday food: mostly warm and comforting, a little fresh and spicy.'],
+  phoenix_summer: ['Hot summer',
+    'Same people on a very hot day in Phoenix, so more searches for fresh, light and spicy food.'],
+  dietary_access: ['Food allergies',
+    'Every search says "no" to one thing: dairy, peanuts, shellfish or almonds.'],
 }
 
 export default function Catalog() {
@@ -26,9 +31,12 @@ export default function Catalog() {
     <div style={{ position: 'relative', zIndex: 2, maxWidth: 960, margin: '0 auto', padding: '110px 28px 120px' }}>
       <div className="mono" style={{ fontSize: 12, letterSpacing: '0.26em', color: 'var(--dim)', marginBottom: 14 }}>CATALOG INTELLIGENCE</div>
       <h1 style={{ marginBottom: 12 }}>What people ask for <span className="editorial-emphasis">that the menu does not offer.</span></h1>
-      <p style={{ fontSize: 17, color: 'var(--dim)', maxWidth: 680, marginBottom: 36 }}>
-        One question: which craving combinations have high search demand but thin supply, and what should we add next?
-        Supply is measured on the real catalog. Demand is a labeled synthetic scenario, so read the ratio, not the counts.
+      <p style={{ fontSize: 17, color: 'var(--dim)', maxWidth: 680, marginBottom: 18 }}>
+        One question: what do people keep asking for that we barely have, so what should we add next?
+      </p>
+      <p style={{ fontSize: 15.5, color: 'var(--dim)', maxWidth: 680, marginBottom: 36, lineHeight: 1.7 }}>
+        The recipe counts are real. The searches are not: I do not have real users yet, so I generated 3,000 example
+        searches with AI for this demo, split into three situations you can switch between below.
       </p>
 
       {err && <p className="mono" style={{ color: 'var(--accent)' }}>{err}</p>}
@@ -36,13 +44,16 @@ export default function Catalog() {
 
       {D && <>
         <div className="mono" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28, fontSize: 12 }}>
-          {Object.entries(SCENARIOS).map(([k, label]) => (
+          {Object.entries(SCENARIOS).map(([k, [label]]) => (
             <button key={k} onClick={() => setScenario(k)} className="chip" aria-pressed={scenario === k}
               style={{ padding: '8px 14px', borderRadius: 999, border: '1px solid var(--line)', cursor: 'pointer', letterSpacing: '0.08em',
                 background: scenario === k ? 'var(--accent)' : 'transparent', color: scenario === k ? '#08090b' : 'var(--ink)' }}>
               {k.toUpperCase()} <span style={{ opacity: 0.7 }}>· {label}</span>
             </button>))}
         </div>
+        <p style={{ fontSize: 15, color: 'var(--dim)', maxWidth: 680, marginBottom: 28, lineHeight: 1.7 }}>
+          <b style={{ color: 'var(--ink)' }}>{SCENARIOS[scenario][0]}.</b> {SCENARIOS[scenario][1]}
+        </p>
 
         {top && (
           <div style={{ border: '1px solid var(--line)', borderRadius: 6, padding: '22px 24px', marginBottom: 36, background: 'var(--card)' }}>
@@ -77,8 +88,12 @@ export default function Catalog() {
             </tr>))}
           </tbody>
         </table>
+        <p style={{ fontSize: 15, color: 'var(--dim)', maxWidth: 680, marginTop: 18, lineHeight: 1.7 }}>
+          <b style={{ color: 'var(--ink)' }}>demand</b>: how often people searched for it. <b style={{ color: 'var(--ink)' }}>supply</b>: how much of
+          the catalog can serve it. <b style={{ color: 'var(--ink)' }}>opportunity</b>: demand divided by supply. 34× means people ask for it 34
+          times more than we have it. Blue bar: we need more of this. Grey bar: we already have enough.
+        </p>
         <p className="mono" style={{ fontSize: 11, color: '#6b675f', marginTop: 12, letterSpacing: '0.04em', lineHeight: 1.7 }}>
-          OPPORTUNITY = DEMAND SHARE / SUPPLY SHARE. ABOVE 1× IS ASKED FOR MORE THAN OFFERED.<br />
           DEMAND: SYNTHETIC_DEMO v{top?.generator_version} SEED {top?.seed}, 3,000 EVENTS OVER 30 DAYS FROM data/demand_scenarios.yml.
           SUPPLY: V2.RECIPE_AXES, CORTEX-EXTRACTED, ≥0.6 ON EACH TARGET AXIS.<br />
           LIVE SEARCHES RECORDED SO FAR: {D.live.searches} (source = live_demo, not in the ratios above).

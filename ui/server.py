@@ -291,12 +291,25 @@ class H(BaseHTTPRequestHandler):
 
     def send_file(self, path, ctype):
         body = path.read_bytes()
-        self.send_response(200)
+        # HTTP Range support: without it Chrome reports seekable=[0,0] on the mp4s and
+        # every video.currentTime seek snaps to 0 (the idle loop needs seeks)
+        rng = self.headers.get("Range")
+        start, end = 0, len(body) - 1
+        if rng and rng.startswith("bytes="):
+            a, _, b = rng[6:].partition("-")
+            start = int(a) if a else max(0, len(body) - int(b))
+            end = int(b) if (a and b) else end
+            end = min(end, len(body) - 1)
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{len(body)}")
+        else:
+            self.send_response(200)
+        self.send_header("Accept-Ranges", "bytes")
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-cache")   # hashed assets change on every build
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(end - start + 1))
         self.end_headers()
-        self.wfile.write(body)
+        self.wfile.write(body[start:end + 1])
 
     def do_GET(self):
         u = urlparse(self.path)

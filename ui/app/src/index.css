@@ -65,14 +65,17 @@ a { color: inherit; }
 .cinematic-single-video { position: absolute; inset: 0; overflow: hidden; }
 .cinematic-single-video video { position: absolute; inset: 0; }
 .story-starfield { position: absolute; inset: 0; opacity: 0; visibility: hidden; }
+.story-starfield--results { filter: brightness(.42) saturate(.7); transition: filter 1.2s ease; }
+/* results: the list sits on the left, the detail panel on the right; darken both under the text */
+.cinematic-backdrop--story-results .cinematic-vignette { background: linear-gradient(90deg, rgba(3,5,9,.88) 0%, rgba(3,5,9,.78) 38%, rgba(3,5,9,.35) 52%, rgba(3,5,9,.55) 68%, rgba(3,5,9,.85) 100%), linear-gradient(180deg, rgba(3,5,9,.25), rgba(3,5,9,.45)); transition: background 1.2s ease; }
 .cinematic-video-stack { position: absolute; inset: 0; animation: video-fade-in .9s ease both; }
 .cinematic-video-stack video { position: absolute; inset: 0; animation: none; }
 .cinematic-video-stack video + video { opacity: 0; visibility: hidden; }
 .destination-stars { position: absolute; z-index: 1; left: 50%; top: 50%; width: max(100vw, 177.778vh); aspect-ratio: 16 / 9; transform: translate(-50%, -50%); pointer-events: none; }
-.destination-star { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; opacity: 0; visibility: hidden; background: #f5fbff; box-shadow: 0 0 7px 2px rgba(218,239,255,.96), 0 0 22px 8px rgba(119,185,235,.72), 0 0 48px 17px rgba(82,153,219,.35); transform-origin: center; }
+.destination-star { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; opacity: 0; visibility: hidden; background: #f5fbff; box-shadow: 0 0 7px 2px rgba(218,239,255,.96), 0 0 22px 8px rgba(119,185,235,.72), 0 0 48px 17px rgba(82,153,219,.35); transform-origin: center; }
 .destination-star::before, .destination-star::after { content: ''; position: absolute; left: 50%; top: 50%; background: linear-gradient(90deg, transparent, rgba(232,247,255,.9), transparent); transform: translate(-50%, -50%); }
-.destination-star::before { width: 46px; height: 1px; }
-.destination-star::after { width: 1px; height: 38px; background: linear-gradient(180deg, transparent, rgba(232,247,255,.82), transparent); }
+.destination-star::before { width: 72px; height: 1px; }
+.destination-star::after { width: 1px; height: 60px; background: linear-gradient(180deg, transparent, rgba(232,247,255,.82), transparent); }
 .cinematic-backdrop--landing { background-image: url('/media/search-ready-poster.png'); background-position: 42% center; }
 .cinematic-backdrop--landing video { object-position: 42% center; }
 .cinematic-backdrop--journey { background-image: url('/media/search-ready-poster.png'); background-position: 42% center; opacity: 1; filter: saturate(.94) brightness(1.02) contrast(1.02); }
@@ -80,7 +83,7 @@ a { color: inherit; }
 .cinematic-backdrop--story { background-image: url('/media/search-departure-poster.png'); background-position: 42% center; opacity: 1; filter: none; }
 .cinematic-backdrop--story video { object-position: 42% center; }
 .cinematic-backdrop--results { background-image: url('/media/search-discovery-poster.png'); opacity: .78; filter: saturate(.9) brightness(.92) contrast(1.05); }
-.cinematic-backdrop--about { background-image: url('/media/about-celestial-poster.png'); opacity: .68; filter: saturate(.72) brightness(.84) contrast(1.02); }
+.cinematic-backdrop--about { background-image: url('/media/about-milkyway-poster.png'); opacity: .68; filter: saturate(.72) brightness(.84) contrast(1.02); }
 .cinematic-backdrop--quiet { opacity: .2; filter: saturate(.65) contrast(1.08); }
 .cinematic-vignette { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3,5,9,.16) 0%, rgba(3,5,9,.18) 34%, rgba(3,5,9,.76) 70%, rgba(3,5,9,.92) 100%), linear-gradient(180deg, rgba(0,0,0,.18) 0%, transparent 35%, rgba(3,5,9,.55) 100%); }
 .cinematic-backdrop--results.cinematic-backdrop--quiet { opacity: .78; filter: saturate(.9) brightness(.92) contrast(1.05); }

@@ -198,6 +198,9 @@ ablation (the raw-text control and exclusion on/off are); eval numbers are 342-c
 measurements, not yet re-judged at 20k. An LLM judge (llama, different family than the
 enricher) was designed, validated against human grades, and **rejected** — not for its
 agreement number but for the direction of its errors (systematic over-exclusion).
+At 20k the corpus floods with near-duplicates: *"warm spicy soup"* returns three hot-and-sour
+soups in the top five (exact-title dedupe only; PLAN.md §v3 has the fix), which also means
+the demand mart's supply counts overcount distinct dishes.
 
 ## Architecture
 
