@@ -245,6 +245,40 @@ JSON, and nothing downstream knows the difference.
 
 ---
 
+## 11. Lean V3: a runtime quality layer, not a new retrieval cycle (2026-08-27)
+
+Vector similarity ranks semantic closeness but does not enforce dish identity, physical
+format, or diversity — visible at 20k as three hot-and-sour soups, limeade for "cold
+refreshing dessert", ganache for "chocolate dessert". The fix is a pure-Python layer
+(`ui/search_quality.py`, no Snowflake, same testability seam as
+`provenance/recommendation.py`) over the existing top-200 candidates, in this order after
+hard exclusion:
+
+1. **Format**: drink-headed titles (`…Limeade`, `Daiquiri Punch`, `Fizzy`) are rejected
+   unless the query names a drink. No UI toggle — the query is the switch.
+2. **Explicit identity** (fail open): only nouns actually in the query create requirements
+   (`noodle soup` → noodle AND soup). Narrow triggers, broad satisfying aliases; title
+   first, enrichment prose as fallback.
+3. **Component exemption**: the SQL component flag now yields when the query names that
+   component (`chocolate ganache` keeps ganache).
+4. **Dish-family dedupe**: parentheticals stripped (`Kimchi Jjigae (Korean Kimchi Stew)`),
+   same head + token containment ≥ 0.8 + Jaccard ≥ 0.6 → one family, best rank survives,
+   rest recorded as `duplicate_dish:<kept_id>`.
+
+Up to five results, never padded; zero eligible results render a no-match state.
+
+**Cut from the original proposal** (2026-08-27 review): the FOOD/DRINK/EITHER UI toggle
+(all 20 gallery cravings are food; a drink word in the query already opens the gate) and
+separate eval files (`gallery.json` before/after diff is the regression set).
+
+**Honest limits.** Keyword rules against LLM prose have both error directions — the layer
+reduces clearly-wrong results, it does not certify the rest. `candidate_count` (and the
+demand mart) stay pre-quality-layer, so supply still overcounts dish variants. The frozen
+V2 NDCG@5 (342-corpus) is untouched and unclaimed; Lean V3 is judged only by the 20-query
+live-corpus gallery (post-ship audit: 0 drink leaks, 0 duplicate families).
+
+---
+
 ## Still open
 
 - How the LLM converts ingredients into a numeric axis value (0–1? ordinal buckets?), and

@@ -93,10 +93,15 @@ the scores don't transfer unchanged — treat 0.844 as a dev-corpus result, not 
 
 Every dish is a star. Type a craving: the live pipeline parses it (Cortex call), maps
 concepts to axes through the hand-editable sensory wiki, then the hard-exclusion pass kills
-matching stars in red — each flashing the term that caught it — and the five survivors form
-a constellation with verbatim evidence in the side card (*spicy 0.8 ← "10 Thai chile
-peppers, seeded and minced"*). Ranking uses the measured winner (profile vectors +
-exclusion); the axes explain. The UI renders scored rows and invents nothing.
+matching stars in red — each flashing the term that caught it — and the survivors (up to
+five) form a constellation with verbatim evidence in the side card (*spicy 0.8 ← "10 Thai
+chile peppers, seeded and minced"*). Ranking uses the measured winner (profile vectors +
+exclusion); the axes explain. The UI renders scored rows and invents nothing. A runtime
+quality layer (`ui/search_quality.py`, Lean V3) then enforces what the query said
+explicitly: dish identity (*noodle soup* means noodle **and** soup), food vs drink
+(beverages need a drink word in the query), query-aware component removal (ganache only
+when asked), and dish-family dedupe (one hot-and-sour soup, not three). Fewer than five
+defensible answers → fewer than five results, never padding.
 
 The UI is the React app in `ui/app` (served built by `server.py`; `npm run dev` in
 `ui/app` for the Vite dev server), two pages: **Search** and **About** (what the project
@@ -164,7 +169,8 @@ parser *understood* (`parsed_axes`); their disagreement is a free parser-quality
 
 Every `/search` writes one decision record: query, parsed preferences, exclusion needles,
 how many candidates were looked at, which were rejected and why (`excluded:cream`,
-`component`, `duplicate_title`), the five picked with their evidence, and a `causes` link
+`component`, `format_mismatch:drink`, `identity_mismatch:noodle`, `duplicate_dish:<id>`),
+the picks with their evidence, and a `causes` link
 to the architecture decision that put the exclusion filter there. Architecture decisions
 themselves are records too (`provenance/architecture.py`: eval result → finding →
 decision → V2), so one trace runs from a served dish back to the measurement.
@@ -198,9 +204,10 @@ ablation (the raw-text control and exclusion on/off are); eval numbers are 342-c
 measurements, not yet re-judged at 20k. An LLM judge (llama, different family than the
 enricher) was designed, validated against human grades, and **rejected** — not for its
 agreement number but for the direction of its errors (systematic over-exclusion).
-At 20k the corpus floods with near-duplicates: *"warm spicy soup"* returns three hot-and-sour
-soups in the top five (exact-title dedupe only; PLAN.md §v3 has the fix), which also means
-the demand mart's supply counts overcount distinct dishes.
+At 20k the corpus floods with near-duplicates: *"warm spicy soup"* used to return three
+hot-and-sour soups in the top five. The Lean V3 quality layer now clusters dish families at
+serve time (`duplicate_dish` in the decision record), but the demand mart still counts every
+variant, so its supply numbers overcount distinct dishes by an unmeasured factor.
 
 ## Architecture
 

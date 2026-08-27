@@ -12,7 +12,7 @@ const LOG = {
   parse: 'PARSING CRAVING',
   axes: 'PLOTTING SENSORY COORDINATES',
   excl: 'REMOVING EXCLUDED DISHES',
-  rank: 'LOCKING FIVE DESTINATIONS',
+  rank: 'SELECTING DESTINATIONS',
 }
 
 const usePage = () => {
@@ -163,7 +163,7 @@ function Search() {
           <h1 className="hero-title">
             Search your <span className="accent">craving.</span>
           </h1>
-          <p className="hero-copy">Your craving becomes a coordinate. Describe the feeling, flavor, or texture you want; we’ll navigate 20,000 real recipes and return five evidence-backed matches.{IS_PUBLIC && ' This public gallery replays real, precomputed results — the live version takes any craving, by invite.'}</p>
+          <p className="hero-copy">Your craving becomes a coordinate. Describe the feeling, flavor, or texture you want; we’ll navigate 20,000 real recipes and return up to five evidence-backed matches.{IS_PUBLIC && ' This public gallery replays real, precomputed results — the live version takes any craving, by invite.'}</p>
           <form onSubmit={run} className="search-bar liquid-glass">
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="a warm spicy soup, no shellfish" aria-label="craving"
               className="query-input" />
@@ -230,8 +230,8 @@ function Search() {
         </>}
       </main>
 
-      {/* results panel */}
-      {stage === 'done' && R && (
+      {/* results panel — never an empty shell when nothing survived the quality layer */}
+      {stage === 'done' && R && R.top.length > 0 && (
         <aside className={`panel recipe-panel ${detailOpen ? 'panel--open' : ''}`}>
           <div className="recipe-panel-header">
             <div className="mono" style={{ fontSize: 11, letterSpacing: '0.2em', color: 'var(--dim)', marginBottom: 10,
@@ -285,6 +285,10 @@ function Search() {
 }
 
 function ResultsOverview({ query, params, results, picked, onPick, onEdit }) {
+  // Lean V3: what the quality layer read out of the query (absent on pre-V3 gallery JSON)
+  const it = results.interpretation
+  const interp = it ? [it.drink_allowed ? 'FOOD OR DRINK' : 'FOOD',
+    ...(it.required_identity || []), ...(it.requested_components || [])].map(s => s.toUpperCase()) : []
   return (
     <section className="results-overview">
       <div className="results-kicker mono"><span className="status-dot" /> SEARCH COMPLETE · {results.top.length} MATCHES</div>
@@ -296,7 +300,15 @@ function ResultsOverview({ query, params, results, picked, onPick, onEdit }) {
         <button type="button" onClick={onEdit} className="edit-search mono">← EDIT SEARCH</button>
       </div>
       {params.length > 0 && <div className="results-params mono">{params.join(' · ').toUpperCase()}</div>}
-      <p className="results-guide">Five destinations found. Choose one to inspect why it matched, then follow the recipe in the detail panel.</p>
+      {interp.length > 0 && <div className="results-params mono">INTERPRETED AS · {interp.join(' · ')}</div>}
+      {results.top.length === 0 ? (
+        <div className="no-match">
+          <p className="results-guide">No strong matches satisfied every part of this craving — showing none rather than padding the list.</p>
+          <p className="results-guide" style={{ color: 'var(--dim)' }}>
+            Try removing one exclusion, broadening the dish type, or wording the craving differently.</p>
+        </div>
+      ) : <>
+      <p className="results-guide">{results.top.length === 5 ? 'Five' : results.top.length} destination{results.top.length === 1 ? '' : 's'} found. Choose one to inspect why it matched, then follow the recipe in the detail panel.</p>
       <div className="ranked-results" aria-label="Ranked recipe results">
         {results.top.map((d, i) => (
           <button type="button" key={d.recipe_id} onClick={() => onPick(i)}
@@ -311,6 +323,7 @@ function ResultsOverview({ query, params, results, picked, onPick, onEdit }) {
           </button>
         ))}
       </div>
+      </>}
       <p className="results-disclaimer mono">AI-EXTRACTED MATCHES CAN BE WRONG · EXCLUSION IS NOT ALLERGY GUIDANCE</p>
     </section>
   )

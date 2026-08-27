@@ -56,8 +56,8 @@ export default function About() {
           Say what you crave.<br /><span className="editorial-emphasis">Get real recipes, with the proof.</span>
         </h1>
         <p className="about-hero-copy" style={{ fontSize: 18, color: 'var(--dim)', maxWidth: 640 }}>
-          Type something like <em>“warm spicy soup, no shellfish”</em>. CravingRAG searches 20,000 real recipes, finds five
-          strong matches, and shows you the evidence behind each one. It recommends recipes that already exist. It never makes them up.
+          Type something like <em>“warm spicy soup, no shellfish”</em>. CravingRAG searches 20,000 real recipes, finds up to five
+          strong matches, and shows you the evidence behind each one. If fewer than five hold up, it shows fewer. It recommends recipes that already exist. It never makes them up.
         </p>
       </section>
 
@@ -173,7 +173,7 @@ export default function About() {
           <li><b style={{ color: 'var(--ink)' }}>A short request leaves room for error.</b> One sentence cannot capture everything you want. The fine-tuning filters for cuisine, spice, richness, and ingredients to avoid help fill in the gaps.</li>
           <li><b style={{ color: 'var(--ink)' }}>The evaluation had one grader: me.</b> When I graded 29 pairs a second time, I agreed with my original decision about two thirds of the time.</li>
           <li><b style={{ color: 'var(--ink)' }}>I wrote the test cravings.</b> I already knew which recipes were in the collection, so the test is closer to a useful checklist than an independent exam.</li>
-          <li><b style={{ color: 'var(--ink)' }}>Similar recipes can crowd the results.</b> A search for “warm spicy soup” may return several versions of hot-and-sour soup because the system currently removes only exact duplicate titles.</li>
+          <li><b style={{ color: 'var(--ink)' }}>Duplicate grouping is a heuristic.</b> Near-identical dishes (three hot-and-sour soups) now count as one result, and drinks stay out of food searches — but both rules read titles and can occasionally merge or keep the wrong recipe.</li>
           <li><b style={{ color: 'var(--ink)' }}>This is not allergy advice.</b> The exclusion filter looks for words in the ingredient list. It is designed for preferences, not medical safety.</li>
         </ul>
         <p style={{ marginTop: 10, color: 'var(--dim)' }}>The full list of known limitations is in PLAN.md, section v3.</p>
@@ -182,7 +182,7 @@ export default function About() {
       <Section title="The paper trail">
         <p>
           Every search creates a record of what you typed, how the system interpreted it, which recipes it removed and why, and which
-          five it kept. Click <b>WHY</b> on any result to see the evidence behind that recommendation.
+          it kept. Click <b>WHY</b> on any result to see the evidence behind that recommendation.
         </p>
       </Section>
     </div>

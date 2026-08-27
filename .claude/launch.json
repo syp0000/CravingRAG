@@ -5,7 +5,8 @@
       "name": "cravingrag",
       "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["ui/server.py"],
-      "port": 8642
+      "port": 8642,
+      "autoPort": true
     },
     {
       "name": "cravingrag-public",

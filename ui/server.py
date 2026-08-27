@@ -35,12 +35,15 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT.parent))
 from provenance.recommendation import recommendation_record  # noqa: E402
 from provenance.recorder import get_recorder                 # noqa: E402
+from search_quality import (component_allowed, infer_intent,  # noqa: E402
+                            rejection as quality_rejection)
 
 RECORDER = get_recorder()   # CRAVING_DECISIONS=off|jsonl|semantica (default jsonl)
 EMBED = "snowflake-arctic-embed-l-v2.0"
 COMPONENT_RE_ANY = r".*\\b(paste|marinade|rub|seasoning|wrappers?|batter)\\b.*"
 COMPONENT_RE_END = (r".*\\b(sauce|dressing|glaze|stock|broth|ketchup|mustard|mayonnaise|mayo|"
-                    r"relish|syrup|jam|jelly|chutney|pesto|vinaigrette|dip)\\s*$")
+                    r"relish|syrup|jam|jelly|chutney|pesto|vinaigrette|dip|"
+                    r"ganache|frosting|icing|filling|topping)\\s*$")
 
 def _connect_kwargs():
     """Local dev reads .dlt/secrets.toml (private key on disk). A deployed host has no
@@ -167,7 +170,7 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
                       AND NOT (LOWER(title) LIKE '%% with %%' OR LOWER(title) LIKE '%% and %%'))) AS is_component
           FROM raw.curated_recipes
         ), annotated AS (
-          SELECT v.recipe_id, v.title, s.signals,
+          SELECT v.recipe_id, v.title, s.signals, v.flavor_profile,
                  ROUND(VECTOR_COSINE_SIMILARITY(v.profile_vec, e.qv), 4) AS sim,
                  c.is_component,
                  {matched_expr} AS matched
@@ -176,7 +179,7 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
           JOIN catalog c USING (recipe_id)
           CROSS JOIN embedded e
         ), ranked AS (
-          SELECT recipe_id, title, sim, is_component, matched
+          SELECT recipe_id, title, sim, is_component, matched, flavor_profile
           FROM annotated
           WHERE TRUE {conds}
           ORDER BY sim DESC
@@ -187,20 +190,24 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
                  COUNT_IF(is_component) AS component_count
           FROM annotated
         )
-        SELECT r.recipe_id, r.title, r.sim, r.is_component, r.matched,
+        SELECT r.recipe_id, r.title, r.sim, r.is_component, r.matched, r.flavor_profile,
                s.candidate_count, s.excluded_count, s.component_count
         FROM stats s
         LEFT JOIN ranked r ON TRUE
         ORDER BY r.sim DESC""", [embed_text, *flat_params])
 
-    candidate_count = int(candidate_rows[0][5] or 0) if candidate_rows else 0
-    excluded_count = int(candidate_rows[0][6] or 0) if candidate_rows else 0
-    component_count = int(candidate_rows[0][7] or 0) if candidate_rows else 0
-    # ponytail: 200 candidates for a top-5 after dedupe/exclusion/component drops;
-    # raise if a heavy-exclusion query ever returns fewer than 5
-    ranked, seen, rejected, considered = [], set(), [], 0
+    candidate_count = int(candidate_rows[0][6] or 0) if candidate_rows else 0
+    excluded_count = int(candidate_rows[0][7] or 0) if candidate_rows else 0
+    component_count = int(candidate_rows[0][8] or 0) if candidate_rows else 0
+    # Lean V3 quality layer (ui/search_quality.py): explicit-identity validation,
+    # food/drink format, query-aware component exemption, dish-family dedupe.
+    # Fewer than 5 defensible answers → fewer than 5 results, never padding.
+    # NOTE candidate_count above is pre-quality-layer (matches ANALYTICS mart).
+    intent = infer_intent(text)
+    ranked, rejected, considered = [], [], 0
     excluded_sample, component_sample = [], []
-    for rid, title, sim, is_component, matched, *_ in candidate_rows:
+    kept = []   # (recipe_id, title) survivors, cited by duplicate_dish rejections
+    for rid, title, sim, is_component, matched, profile, *_ in candidate_rows:
         if rid is None:  # stats still returns one row when ranking found nothing
             continue
         rid = int(rid)
@@ -209,15 +216,15 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
             excluded_sample.append({"recipe_id": rid, "matched": matched})
         if is_component:
             component_sample.append(rid)
-        # UI-only dedupe by normalized title (Siyeon's call): three "Hot And Sour Soup"
-        # stars tell the viewer nothing — eval keeps every row, the sky keeps one per name
-        name = " ".join(title.lower().split())
-        why = (f"excluded:{matched}" if matched else "component" if is_component
-               else "duplicate_title" if name in seen else None)
+        why = f"excluded:{matched}" if matched else None
+        if why is None and is_component and not component_allowed(title, intent):
+            why = "component"
+        if why is None:
+            why = quality_rejection(title, profile, intent, kept)
         if why:
             rejected.append({"recipe_id": rid, "title": title.strip(), "sim": float(sim), "why": why})
             continue
-        seen.add(name)
+        kept.append((rid, title))
         ranked.append({"recipe_id": rid, "title": title.strip(), "sim": float(sim)})
         if len(ranked) == 5:
             break
@@ -255,6 +262,11 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
               "excluded": excluded_sample, "excluded_count": excluded_count,
               "components": component_sample, "component_count": component_count,
               "candidate_count": candidate_count,
+              # Lean V3: what the quality layer read out of the query (drives the
+              # INTERPRETED AS chip; rejection counts live in the /why record)
+              "interpretation": {"required_identity": sorted(intent["required_identity"]),
+                                 "drink_allowed": intent["drink_ok"],
+                                 "requested_components": sorted(intent["requested_components"])},
               "top": ranked}
     try:   # provenance is a side note; a broken notebook must never break a search
         result["decision_id"] = RECORDER.record(recommendation_record(result, rejected, considered, needles))
