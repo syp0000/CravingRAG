@@ -10,11 +10,12 @@ One stdlib HTTP server, two endpoints:
   GET /search?q=…  → runs the REAL pipeline for an arbitrary craving:
                      ① V2.PARSE_CRAVING (live Cortex call)
                      ② exclusion needles = parsed terms + V2.EXCLUSION_ALIASES
-                     ③ ranking = the measured winner arm (V1 profile vectors
-                        + hard exclusion + component filter; NDCG@5 0.844 on the
-                        342-recipe dev corpus — the 20k live corpus is not re-judged)
-                     ④ axis evidence for the top dishes from V2.RECIPE_SIGNALS
-                     ⑤ one row into ANALYTICS.SEARCH_EVENTS, source = live_demo
+                     ③ one catalog pass ranks stored V1 profile vectors, annotates
+                        hard exclusions/components, and counts eligible dishes
+                     ④ one bulk fetch adds stored evidence and recipe text to the five
+                        finalists (the AI never rereads the catalog at search time)
+                     ⑤ one row into ANALYTICS.SEARCH_EVENTS, source = live_demo,
+                        reusing the candidate count from step ③
 The frozen-parse rule applies to EVAL only; the product parses live.
 
 Usage:  .venv/bin/python ui/server.py   → http://localhost:8642
@@ -111,66 +112,107 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
         for axis, w in q(f"SELECT axis, MAX(weight) FROM V2.SENSORY_WIKI WHERE concept IN ({ph}) GROUP BY axis", concepts):
             axes[axis] = float(w)
 
-    # exclusion needles: term itself + registered aliases (same rule as V2.EXCLUDED_PAIRS)
+    # Exclusion needles: term itself + registered aliases (same rule as
+    # V2.EXCLUDED_PAIRS). The catalog scan happens later, inside the ranking query;
+    # never fetch one annotation row per recipe into Python.
     needles = list(excludes)
     if excludes:
         ph = ",".join(["%s"] * len(excludes))
         needles += [a for (a,) in q(
             f"SELECT alias FROM V2.EXCLUSION_ALIASES WHERE canonical_term IN ({ph})", excludes)]
 
-    # per-recipe: excluded? component? — drives the star-death animation
-    needle_case = " ".join(
-        f"WHEN hay LIKE '%%' || %s || '%%' THEN %s" for _ in needles)
-    flat_params = [p for n in needles for p in (n, n)]
-    rows = q(f"""
-        WITH hay AS (
-          SELECT recipe_id, title,
-                 LOWER(COALESCE(title,'')||' '||COALESCE(ingredients,'')||' '||COALESCE(ner,'')) AS hay,
-                 (LOWER(title) RLIKE '{COMPONENT_RE_ANY}'
-                  OR (LOWER(title) RLIKE '{COMPONENT_RE_END}'
-                      AND NOT (LOWER(title) LIKE '%% with %%' OR LOWER(title) LIKE '%% and %%'))) AS is_component
-          FROM raw.curated_recipes)
-        SELECT recipe_id, is_component,
-               {f"CASE {needle_case} END" if needles else "NULL"} AS matched
-        FROM hay""", flat_params)
-    comp = {int(r): bool(c) for r, c, m in rows}
-    excl = {int(r): m for r, c, m in rows if m}
-
     # dial filters ride the extracted axes: what the measurement said axes are FOR.
     # Fail open on NULL: an unmeasured axis neither qualifies nor disqualifies a dish,
     # except hard demands (fire / rich) which require measured evidence.
     SPICE_COND = {
-        "none":   "AND (s.signals:spicy IS NULL OR s.signals:spicy <= 0.2)",
-        "mild":   "AND (s.signals:spicy IS NULL OR s.signals:spicy <= 0.5)",
-        "medium": "AND s.signals:spicy >= 0.3",
-        "fire":   "AND s.signals:spicy >= 0.6",
+        "none":   "AND (signals:spicy IS NULL OR signals:spicy <= 0.2)",
+        "mild":   "AND (signals:spicy IS NULL OR signals:spicy <= 0.5)",
+        "medium": "AND signals:spicy >= 0.3",
+        "fire":   "AND signals:spicy >= 0.6",
     }
     RICH_COND = {
-        "light": "AND (s.signals:rich IS NULL OR s.signals:rich <= 0.35)",
-        "rich":  "AND s.signals:rich >= 0.6",
+        "light": "AND (signals:rich IS NULL OR signals:rich <= 0.35)",
+        "rich":  "AND signals:rich >= 0.6",
     }
     conds = SPICE_COND.get(spice or "", "") + " " + RICH_COND.get(rich or "", "")
 
-    # winner-arm ranking: profile vector cosine, filters applied (embed evaluated ONCE)
-    top = q(f"""
-        SELECT v.recipe_id, v.title,
-               ROUND(VECTOR_COSINE_SIMILARITY(v.profile_vec, e.qv), 4) AS sim
-        FROM V1.RECIPE_PROFILES v
-        JOIN V2.RECIPE_SIGNALS s USING (recipe_id)
-        CROSS JOIN (SELECT AI_EMBED('{EMBED}', %s) AS qv) e
-        WHERE TRUE {conds}
-        ORDER BY sim DESC
-        LIMIT 200""", (embed_text,))
+    # One database pass now does the work that used to take three full catalog
+    # passes: exclusion/component annotations, vector ranking, and the analytics
+    # candidate count. Only the best 200 lightweight rows cross into Python.
+    needle_case = " ".join(
+        "WHEN hay LIKE '%%' || %s || '%%' THEN %s" for _ in needles)
+    matched_expr = f"CASE {needle_case} END" if needles else "NULL::STRING"
+    flat_params = [p for needle in needles for p in (needle, needle)]
+
+    # Keep live candidate_count consistent with ANALYTICS.CANDIDATE_COUNT: strong
+    # parsed axes constrain supply, mid-strength implications do not.
+    supply_conds = []
+    for axis, target in axes.items():
+        if axis not in {"spicy", "warm", "brothy", "savory", "rich", "fresh", "sweet", "comforting"}:
+            continue
+        if target >= 0.6:
+            supply_conds.append(f"signals:{axis}::float >= 0.6")
+        elif target <= 0.2:
+            supply_conds.append(f"COALESCE(signals:{axis}::float, 0) <= 0.35")
+    supply_fit = " AND ".join(supply_conds) or "TRUE"
+
+    candidate_rows = q(f"""
+        WITH embedded AS (
+          SELECT AI_EMBED('{EMBED}', %s) AS qv
+        ), catalog AS (
+          SELECT recipe_id,
+                 LOWER(COALESCE(title,'')||' '||COALESCE(ingredients,'')||' '||COALESCE(ner,'')) AS hay,
+                 (LOWER(title) RLIKE '{COMPONENT_RE_ANY}'
+                  OR (LOWER(title) RLIKE '{COMPONENT_RE_END}'
+                      AND NOT (LOWER(title) LIKE '%% with %%' OR LOWER(title) LIKE '%% and %%'))) AS is_component
+          FROM raw.curated_recipes
+        ), annotated AS (
+          SELECT v.recipe_id, v.title, s.signals,
+                 ROUND(VECTOR_COSINE_SIMILARITY(v.profile_vec, e.qv), 4) AS sim,
+                 c.is_component,
+                 {matched_expr} AS matched
+          FROM V1.RECIPE_PROFILES v
+          JOIN V2.RECIPE_SIGNALS s USING (recipe_id)
+          JOIN catalog c USING (recipe_id)
+          CROSS JOIN embedded e
+        ), ranked AS (
+          SELECT recipe_id, title, sim, is_component, matched
+          FROM annotated
+          WHERE TRUE {conds}
+          ORDER BY sim DESC
+          LIMIT 200
+        ), stats AS (
+          SELECT COUNT_IF(NOT is_component AND matched IS NULL AND {supply_fit}) AS candidate_count,
+                 COUNT_IF(matched IS NOT NULL) AS excluded_count,
+                 COUNT_IF(is_component) AS component_count
+          FROM annotated
+        )
+        SELECT r.recipe_id, r.title, r.sim, r.is_component, r.matched,
+               s.candidate_count, s.excluded_count, s.component_count
+        FROM stats s
+        LEFT JOIN ranked r ON TRUE
+        ORDER BY r.sim DESC""", [embed_text, *flat_params])
+
+    candidate_count = int(candidate_rows[0][5] or 0) if candidate_rows else 0
+    excluded_count = int(candidate_rows[0][6] or 0) if candidate_rows else 0
+    component_count = int(candidate_rows[0][7] or 0) if candidate_rows else 0
     # ponytail: 200 candidates for a top-5 after dedupe/exclusion/component drops;
     # raise if a heavy-exclusion query ever returns fewer than 5
     ranked, seen, rejected, considered = [], set(), [], 0
-    for rid, title, sim in top:
+    excluded_sample, component_sample = [], []
+    for rid, title, sim, is_component, matched, *_ in candidate_rows:
+        if rid is None:  # stats still returns one row when ranking found nothing
+            continue
         rid = int(rid)
         considered += 1
+        if matched:
+            excluded_sample.append({"recipe_id": rid, "matched": matched})
+        if is_component:
+            component_sample.append(rid)
         # UI-only dedupe by normalized title (Siyeon's call): three "Hot And Sour Soup"
         # stars tell the viewer nothing — eval keeps every row, the sky keeps one per name
         name = " ".join(title.lower().split())
-        why = (f"excluded:{excl[rid]}" if rid in excl else "component" if comp.get(rid)
+        why = (f"excluded:{matched}" if matched else "component" if is_component
                else "duplicate_title" if name in seen else None)
         if why:
             rejected.append({"recipe_id": rid, "title": title.strip(), "sim": float(sim), "why": why})
@@ -180,49 +222,60 @@ def search(text, cuisines=None, avoid=None, spice=None, rich=None):
         if len(ranked) == 5:
             break
 
-    # axis evidence + the recipe itself for the finalists
+    # Fetch all finalist evidence and recipe content in one round trip instead of
+    # issuing two queries per recipe.
+    details = {}
+    if ranked:
+        ph = ",".join(["%s"] * len(ranked))
+        for rid, ingredients, directions, signals, evidence in q(f"""
+            SELECT c.recipe_id, c.ingredients, c.directions, s.signals, s.evidence
+            FROM raw.curated_recipes c
+            JOIN V2.RECIPE_SIGNALS s USING (recipe_id)
+            WHERE c.recipe_id IN ({ph})""", [d["recipe_id"] for d in ranked]):
+            details[int(rid)] = (ingredients, directions, signals, evidence)
+
     for d in ranked:
         d["edges"] = []
-        if axes:
-            for (sig, ev) in q("SELECT signals, evidence FROM V2.RECIPE_SIGNALS WHERE recipe_id=%s", (d["recipe_id"],)):
-                sig = json.loads(sig or "{}"); ev = json.loads(ev or "{}")
-                for axis, target in sorted(axes.items()):
-                    if sig.get(axis) is not None:
-                        d["edges"].append({"axis": axis, "value": float(sig[axis]), "target": target,
-                                           "evidence": ev.get(axis, [])[:3]})
-        for (ing, dirs) in q("SELECT ingredients, directions FROM raw.curated_recipes WHERE recipe_id=%s", (d["recipe_id"],)):
-            try:
-                d["ingredients"] = json.loads(ing)
-                d["directions"] = json.loads(dirs)
-            except Exception:
-                d["ingredients"], d["directions"] = [], []
+        ing, dirs, sig, ev = details.get(d["recipe_id"], ("[]", "[]", "{}", "{}"))
+        try:
+            sig = json.loads(sig or "{}"); ev = json.loads(ev or "{}")
+            d["ingredients"] = json.loads(ing or "[]")
+            d["directions"] = json.loads(dirs or "[]")
+        except (TypeError, json.JSONDecodeError):
+            sig, ev, d["ingredients"], d["directions"] = {}, {}, [], []
+        for axis, target in sorted(axes.items()):
+            if sig.get(axis) is not None:
+                d["edges"].append({"axis": axis, "value": float(sig[axis]), "target": target,
+                                   "evidence": ev.get(axis, [])[:3]})
     result = {"query": text, "concepts": concepts, "excludes": excludes,
               "params": {"cuisines": cuisines or [], "spice": spice, "rich": rich},
               "axes": [{"axis": a, "target": t} for a, t in sorted(axes.items())],
-              "excluded": [{"recipe_id": r, "matched": m} for r, m in excl.items()],
-              "components": [r for r, c in comp.items() if c],
+              # Samples support the decision trace without returning the whole catalog.
+              # The scalar counts are exact and drive the UI.
+              "excluded": excluded_sample, "excluded_count": excluded_count,
+              "components": component_sample, "component_count": component_count,
+              "candidate_count": candidate_count,
               "top": ranked}
     try:   # provenance is a side note; a broken notebook must never break a search
         result["decision_id"] = RECORDER.record(recommendation_record(result, rejected, considered, needles))
     except Exception as e:
         print(f"decision not recorded: {e}", file=sys.stderr)
     try:   # demand side: this real search becomes one ANALYTICS.SEARCH_EVENTS row (source=live_demo)
-        record_search_event(text, concepts, axes, excludes)
+        record_search_event(text, concepts, axes, excludes, candidate_count)
     except Exception as e:
         print(f"search event not recorded: {e}", file=sys.stderr)
     return result
 
 
-def record_search_event(text, concepts, axes, excludes):
+def record_search_event(text, concepts, axes, excludes, candidate_count):
     """Same schema the synthetic generator writes (sql/15), labeled live_demo. No
     scenario, no authored intent: nobody authored a real person's craving."""
     q("""INSERT INTO ANALYTICS.SEARCH_EVENTS
          SELECT UUID_STRING(), CURRENT_TIMESTAMP(), %s, NULL, NULL,
-                PARSE_JSON(%s), PARSE_JSON(%s), PARSE_JSON(%s)::array,
-                ANALYTICS.CANDIDATE_COUNT(PARSE_JSON(%s), PARSE_JSON(%s)::array),
+                PARSE_JSON(%s), PARSE_JSON(%s), PARSE_JSON(%s)::array, %s,
                 'live_demo', NULL, NULL""",
       (text, json.dumps(concepts), json.dumps(axes), json.dumps(excludes),
-       json.dumps(axes), json.dumps(excludes)))
+       candidate_count))
 
 
 def gaps():

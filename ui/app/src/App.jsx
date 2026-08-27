@@ -132,7 +132,7 @@ function Search() {
     if (res.error) return fail(res.error)
     setR(res)
     setStage('axes'); await sleep(900)
-    if ((res.excluded || []).length) { setStage('excl'); await sleep(900) }
+    if ((res.excluded_count ?? (res.excluded || []).length) > 0) { setStage('excl'); await sleep(900) }
     setStage('rank'); await sleep(300 * res.top.length + 200)
     dataReady.current = true
     if (journeyDone.current) setStage('done')
@@ -224,7 +224,7 @@ function Search() {
             {busy && <div key={stage} className="stage progress-stage">
               <span className="accent">▶</span> {LOG[stage]}
               {stage === 'axes' && R && <span style={{ color: 'var(--dim)' }}>  [{R.concepts.join(' / ') || 'no axis, vector only'}]</span>}
-              {stage === 'excl' && R && <span className="accent">  −{R.excluded.length} dishes</span>}
+              {stage === 'excl' && R && <span className="accent">  −{R.excluded_count ?? (R.excluded || []).length} dishes</span>}
             </div>}
           </div>
         </>}
