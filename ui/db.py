@@ -1,8 +1,9 @@
-"""One shared Snowflake connection for the demo server, with a one-shot retry.
+"""One shared, lazily opened Snowflake connection with a one-shot retry.
 
 Local dev reads .dlt/secrets.toml (private key on disk). A deployed host has no such
 file, so when SNOWFLAKE_ACCOUNT is set the credentials come from env vars and the
-private key travels as inline PEM in SNOWFLAKE_PRIVATE_KEY.
+private key travels as inline PEM in SNOWFLAKE_PRIVATE_KEY. Importing this module never
+reads credentials or opens a network connection; the first q() call does that work.
 """
 import os
 import threading
@@ -44,14 +45,11 @@ def connect_kwargs():
     return base
 
 
-CONN_KWARGS = connect_kwargs()
-
-
 def connect():
-    return snowflake.connector.connect(**CONN_KWARGS)
+    return snowflake.connector.connect(**connect_kwargs())
 
 
-CONN = connect()
+CONN = None
 CONN_LOCK = threading.Lock()   # one connection shared by all handler threads
                                # (ThreadingHTTPServer): the connector is not safe
                                # for concurrent cursors on one connection.
@@ -64,6 +62,8 @@ def q(sql, params=None):
     global CONN
     with CONN_LOCK:
         try:
+            if CONN is None:
+                CONN = connect()
             cur = CONN.cursor()
             cur.execute(sql, params or (), timeout=QUERY_TIMEOUT)
         except Exception:

@@ -9,7 +9,6 @@ Snowflake.
 import json
 import sys
 import threading
-import tomllib
 import types
 import urllib.error
 import urllib.request
@@ -69,22 +68,15 @@ class FakeCursor:
 
 
 def _import_server():
-    """db.py connects at import: stub the connector module and the secrets file."""
+    """Stub the connector before importing the credential-free server modules."""
     boot = FakeDB()
     fake = types.ModuleType("snowflake.connector")
     fake.connect = boot.connect
     pkg = sys.modules.setdefault("snowflake", types.ModuleType("snowflake"))
     pkg.connector = fake                       # real package may already be imported
     sys.modules["snowflake.connector"] = fake
-    real_load = tomllib.load
-    tomllib.load = lambda f: {"destination": {"snowflake": {"credentials": dict(
-        host="acc", username="u", private_key_path="/dev/null", warehouse="w",
-        database="d", role="r")}}}
-    try:
-        sys.path.insert(0, str(UI))
-        import server
-    finally:
-        tomllib.load = real_load
+    sys.path.insert(0, str(UI))
+    import server
     return server
 
 
@@ -229,6 +221,12 @@ def test_transient_cortex_failure_retries_once(fake):
 
 
 # ---------- q() retries ----------
+
+def test_q_connects_lazily(fake, monkeypatch):
+    monkeypatch.setattr(db, "CONN", None)
+    fake.on("SELECT 1", [(1,)])
+    assert server.q("SELECT 1") == [(1,)]
+    assert fake.connects == 1
 
 def test_q_reconnects_on_dead_execute(fake):
     attempts = iter([_raise("connection closed"), lambda *a: [(1,)]])
