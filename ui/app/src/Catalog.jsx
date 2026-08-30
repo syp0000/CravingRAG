@@ -43,13 +43,13 @@ export default function Catalog() {
         What we have (supply) is counted from the real catalog. What people crave (demand) is generated, in three situations. Pick one:
       </p>
 
-      {err && <p className="mono" style={{ color: 'var(--accent)' }}>{err}</p>}
+      {err && <p role="alert" className="mono" style={{ color: 'var(--accent)' }}>{err}</p>}
       {!D && !err && <p className="mono" style={{ color: 'var(--dim)' }}>LOADING SNOWFLAKE MART</p>}
 
       {D && <>
-        <div className="mono" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28, fontSize: 12 }}>
+        <div className="mono" role="group" aria-label="Demand scenario" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28, fontSize: 12 }}>
           {Object.entries(SCENARIOS).map(([k, [label]]) => (
-            <button key={k} onClick={() => setScenario(k)} className="chip" aria-pressed={scenario === k}
+            <button key={k} type="button" onClick={() => setScenario(k)} className="chip" aria-pressed={scenario === k}
               style={{ padding: '8px 14px', borderRadius: 999, border: '1px solid var(--line)', cursor: 'pointer', letterSpacing: '0.08em',
                 background: scenario === k ? 'var(--accent)' : 'transparent', color: scenario === k ? '#08090b' : 'var(--ink)' }}>
               {k.toUpperCase()} <span style={{ opacity: 0.7 }}>· {label}</span>
@@ -71,12 +71,13 @@ export default function Catalog() {
           </div>)}
 
         <table className="mono" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <caption className="visually-hidden">Demand versus supply per craving intent, {SCENARIOS[scenario][0]} scenario</caption>
           <thead><tr style={{ color: 'var(--dim)', textAlign: 'left' }}>
-            <th style={th}>intent</th><th style={th}>demand</th><th style={th}>supply</th>
-            <th style={{ ...th, textAlign: 'right' }}>dishes</th><th style={{ ...th, width: '34%' }}>opportunity</th></tr></thead>
+            <th scope="col" style={th}>intent</th><th scope="col" style={th}>demand</th><th scope="col" style={th}>supply</th>
+            <th scope="col" style={{ ...th, textAlign: 'right' }}>dishes</th><th scope="col" style={{ ...th, width: '34%' }}>opportunity</th></tr></thead>
           <tbody>{rows.map(r => (
             <tr key={r.intent_key} style={{ color: r === top ? 'var(--ink)' : '#b5b1a8' }}>
-              <td style={td}>{r.intent_key}</td>
+              <th scope="row" style={{ ...td, fontWeight: 'inherit', textAlign: 'left' }}>{r.intent_key}</th>
               <td style={td}>{pct(r.demand_share)}</td>
               <td style={td}>{pct(r.supply_share)}</td>
               <td style={{ ...td, textAlign: 'right' }}>{r.matching_dishes.toLocaleString()}</td>

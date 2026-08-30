@@ -102,11 +102,15 @@ def normalize_title(title):
     return [w for w in t.split() if w not in _STOP]
 
 
+_CLAUSE_WORDS = {"with", "in", "over"}
+
+
 def _head(title):
     """Dish head = last meaningful token before any 'with/in/over' clause.
     'Hot And Sour Soup with Chicken' -> soup."""
-    base = re.split(r"\s+(?:with|in|over)\s+", _strip_parens(title).lower())[0]
-    toks = normalize_title(base)
+    words = _strip_parens(title).lower().split()
+    cut = next((i for i, w in enumerate(words) if w in _CLAUSE_WORDS and 0 < i < len(words) - 1), len(words))
+    toks = normalize_title(" ".join(words[:cut]))
     return toks[-1] if toks else ""
 
 

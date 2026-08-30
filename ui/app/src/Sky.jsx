@@ -118,7 +118,12 @@ const Sky = forwardRef(function Sky({ dimmed = false, showLabels = true, classNa
     },
   }))
 
-  return <canvas ref={canvasRef} className={className} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }} />
+  // decorative: hidden from assistive tech, fallback text for browsers without canvas
+  return (
+    <canvas ref={canvasRef} aria-hidden="true" className={className} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+      Decorative star field
+    </canvas>
+  )
 })
 
 export default Sky

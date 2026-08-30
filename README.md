@@ -121,8 +121,9 @@ dedupe (one hot-and-sour soup, not three). Fewer than five defensible answers �
 than five results, never padding.
 
 The UI is the React app in `ui/app` (served built by `server.py`; `npm run dev` in
-`ui/app` for the Vite dev server), two pages: **Search** and **About**. Motion is GSAP,
-kept quiet. Earlier skies live in `archive/`.
+`ui/app` for the Vite dev server), three pages: **Search**, **Catalog** and **About**.
+Motion is GSAP, kept quiet. The two single-file prototypes that came before it are in
+`archive/` (see *Development* below).
 
 ## Deployment (two tiers)
 
@@ -148,6 +149,9 @@ Cloudflare-proxied domain with **Cloudflare Access**: only allowlisted emails ge
 a one-time code (no account needed). The gate is cost control as much as privacy.
 Free-tier caveat, stated honestly: the instance sleeps when idle, so the first hit after
 a lull takes ~30–60s to wake (the Access email step hides most of that).
+
+The limits of that boundary (no rate limiting, request-size bounds, fixed error
+bodies) are spelled out under *Development › Security boundary* below.
 
 ## Business side — the same scores as a dashboard
 
@@ -204,7 +208,7 @@ surfaced: a broken notebook cannot break a search.
 .venv/bin/python -m provenance.architecture          # record the V1→V2 chain once
 .venv/bin/python -m provenance.recorder list          # everything recorded
 .venv/bin/python -m provenance.recorder trace <id>    # walk causes back to the root
-.venv/bin/pytest provenance -v
+pytest provenance -v
 ```
 
 **Why Semantica is an adapter, not the default.** It was evaluated for exactly this layer
@@ -273,15 +277,86 @@ the authored code only — the RecipeNLG-derived data stays non-commercial
 research/educational regardless, and the generated media and third-party dependencies
 above keep their own terms.
 
-## Setup
+## Development
+
+**Versions.** Python 3.12 (`pyproject.toml`, CI), Node 22 (CI; 20+ works), npm.
+
+**Two install profiles.** The offline test suite needs only stdlib + pytest. The
+pipelines and the live server need the Snowflake stack and credentials.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
-cp .dlt/example.secrets.toml .dlt/secrets.toml   # key-pair auth; see comments inside
+pip install -r requirements-dev.txt                      # tests only: pytest, pytest-cov
+pip install -r requirements.txt                          # + dlt, snowpark, connector: pipelines and server
+cp .dlt/example.secrets.toml .dlt/secrets.toml           # key-pair auth; see comments inside
+(cd ui/app && npm ci)                                    # React app: vite, vitest, oxlint
 ```
 
-Pipeline order: `pipelines/curate.py` → `pipelines/load_curated.py` →
+**Checks.**
+
+```bash
+pytest                           # all Python tests + coverage.xml (config in pyproject.toml)
+cd ui/app && npm run lint        # oxlint
+cd ui/app && npm test            # vitest + Testing Library, writes coverage/lcov.info
+cd ui/app && npm run build       # production bundle into ui/app/dist
+scripts/verify.sh                # the four above in one command, no credentials needed
+python pipelines/compile_wiki.py --check
+python eval/confidence.py        # reproduce the eval table + bootstrap CIs (Snowflake)
+sonar-scanner                    # optional; reads sonar-project.properties and both coverage
+                                 # reports (SONAR_HOST_URL / SONAR_TOKEN from the environment)
+```
+
+**What runs offline.** Everything under `pytest` and `npm test`: `ui/test_server.py`
+drives the HTTP server and the whole search pipeline against a scripted fake connection,
+`ui/test_search_quality.py`, `provenance/`, and `pipelines/test_compile_wiki.py` are
+pure Python, `ui/app/src/App.test.jsx` mocks the network and the footage. No test opens
+a Snowflake session or makes a Cortex call.
+
+**What needs Snowflake credentials.** Every pipeline script, every file in `sql/`,
+`eval/confidence.py`, `ui/build_gallery.py`, and running `ui/server.py` itself.
+Locally the server reads `.dlt/secrets.toml`; deployed, it reads `SNOWFLAKE_*` env vars
+with the private key as inline PEM (`SNOWFLAKE_PRIVATE_KEY`). Nothing else is required.
+
+**CI.** [.github/workflows/ci.yml](.github/workflows/ci.yml) runs the Python and
+frontend jobs on every push and pull request. Sonar analysis is a third job, pinned to a
+commit SHA of `sonarqube-scan-action`, that runs only when the repository secret
+`SONAR_TOKEN` exists; without it the job logs a skip and the build still passes.
+Repository settings it reads: secret `SONAR_TOKEN` (required), secret `SONAR_HOST_URL`
+(optional, SonarCloud by default), variable `SONAR_ORGANIZATION` (required on
+SonarCloud), variable `SONAR_PROJECT_KEY` (optional, defaults to `<owner>_<repo>` so a
+fork gets its own key). Locally: `sonar-scanner -Dsonar.organization=<org>
+-Dsonar.projectKey=<owner>_<repo>` with the token in `SONAR_TOKEN`.
+
+The quality gate is configured in Sonar, not in the repo. On SonarCloud: *Administration
+→ Quality Gates → Create* (copy *Sonar way*), conditions on new code: coverage ≥ 80%,
+duplicated lines < 3%, reliability / security / maintainability rating A, security
+hotspots reviewed 100%; no condition on overall coverage, which is raised gradually. Then
+*Project → Administration → Quality Gate* → select it, new-code definition *previous
+version*. Two findings are reviewed and kept, not suppressed: the seeded
+`random.Random` in `pipelines/generate_demo_demand.py` and `eval/confidence.py` is
+statistical sampling with a fixed seed for reproducibility (mark the hotspot *Safe*), and
+the `http://localhost:8642` proxy targets in `ui/app/vite.config.js` are the local dev
+server only, TLS terminates at Cloudflare (*Safe*). Both are recorded in
+[sonar-project.properties](sonar-project.properties).
+
+**Security boundary.** The live deployment sits behind Cloudflare Access; that is the
+authentication layer and the only one. Access does **not** rate-limit: every request
+from an allowlisted user reaches Snowflake and costs a Cortex call. The server bounds
+request *size* (`MAX_QUERY_LEN`, default 300 chars; at most 10 cuisine / avoid values of
+40 safe characters; spice and richness restricted to the chip values; a 60 s statement
+timeout via `SNOWFLAKE_QUERY_TIMEOUT`; a 30 s socket timeout) and returns a fixed
+`{"error": "internal error"}` on failure with the traceback in the server log only.
+There is no per-user throttle; for a small trusted allowlist that is a deliberate
+omission, and the upgrade path is a Cloudflare rate rule in front or a token bucket
+before the search call.
+
+**Archived prototypes.** `archive/` keeps superseded work out of the build and out of
+analysis: the Streamlit V1 app (`streamlit_app_v1.py`), the V1 search SQL, and two
+single-file HTML prototypes (`live.html`, `constellation_static.html`) that drew the
+constellation with hand-written SVG before the React app existed. They are not served,
+not built, not tested and not maintained; the React app in `ui/app` is the only UI.
+
+**Pipeline order** (Snowflake): `pipelines/curate.py` → `pipelines/load_curated.py` →
 `sql/06`–`08` (enrichment) → `pipelines/compile_wiki.py` → `sql/09` (parser) →
 `pipelines/load_frozen_parses.py` (⚠️ before 10–12: they read `EVAL2.V2_PARSED`) →
 `sql/10`–`12` (exclusion, scoring, pooled eval) → `sql/13`–`14` (insights, semantic
@@ -289,14 +364,6 @@ view) → `sql/15` → `pipelines/generate_demo_demand.py` → `sql/16` (demand 
 synthetic demand, demand-supply mart; rerun `sql/14` ④ after) → `sql/17` (app role, for
 deploys) → `ui/server.py`. Scaling past the curated 342 is meter-first: read
 [PLAN.md](PLAN.md) §Weekend 5+ before spending.
-
-## Checks
-
-```bash
-python -m pytest pipelines provenance ui/test_search_quality.py -v
-python pipelines/compile_wiki.py --check
-python eval/confidence.py        # reproduce the eval table + bootstrap CIs
-```
 
 ## Repo layout
 
@@ -310,7 +377,10 @@ wiki/     craving concepts, axis weights in frontmatter (Obsidian vault)
 eval/     queries.yml · JUDGING.md · judgments.csv (386, with provenance)
           parses_frozen.csv · results_baseline.md · results_v2.md
           confidence.py (bootstrap CIs)
-ui/       server.py (live pipeline API) · search_quality.py (+ tests) · app/ (React)
+ui/       server.py (HTTP + validation) · pipeline.py (parse → retrieve → rank → record) ·
+          db.py (connection, retry) · search_quality.py · build_gallery.py · tests ·
+          app/src: App.jsx (routing shell) · Search.jsx (journey state) · SearchForm ·
+          Filters · ProgressLog · ResultsOverview · RecipeDetail · Backdrop (footage) · Sky
 provenance/ recorder (interface, jsonl, semantica) · recommendation · architecture · tests
-archive/  superseded: DESIGN.md, V1 search, first loaders, earlier UIs
+archive/  superseded: Korean docs, V1 search SQL, Streamlit V1, two HTML prototypes
 ```

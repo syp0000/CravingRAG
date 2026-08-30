@@ -59,7 +59,8 @@ def main():
     for a in sorted(arms, key=lambda a: sum(scores[a])):
         print(f"  {a:16s} {sum(scores[a]) / len(qids):.3f}")
 
-    rng = random.Random(20260826)
+    # Bootstrap resampling for CIs: fixed seed for reproducible numbers, no security use.
+    rng = random.Random(20260826)  # NOSONAR
     print(f"\nPairwise deltas ({BOOT:,} resamples; CI excluding 0 = significant):")
     for i, a in enumerate(arms):
         for b in arms[i + 1:]:

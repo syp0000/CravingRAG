@@ -32,7 +32,9 @@ def phrase(rng, intent):
 
 
 def build_events():
-    rng = random.Random(CFG["seed"])
+    # Synthetic demo demand: seeded so the mart is reproducible. Not a security
+    # context, a CSPRNG would break reproducibility and buy nothing.
+    rng = random.Random(CFG["seed"])  # NOSONAR
     end = datetime.fromisoformat(str(CFG["window_end"]))
     span = CFG["days"] * 86400
     base = CFG["scenarios"]["baseline"]["intents"]

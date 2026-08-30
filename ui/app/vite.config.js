@@ -16,4 +16,10 @@ export default defineConfig({
     },
   },
   build: { outDir: 'dist' },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test-setup.js',
+    css: false,
+    coverage: { provider: 'v8', reporter: ['text-summary', 'lcov'], include: ['src/**/*.{js,jsx}'], exclude: ['src/**/*.test.jsx', 'src/test-setup.js', 'src/main.jsx'] },
+  },
 })

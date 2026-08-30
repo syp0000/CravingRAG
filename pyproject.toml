@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+testpaths = ["pipelines", "provenance", "ui"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
+norecursedirs = [".venv", "archive", "node_modules", "ui/app", "data"]
+addopts = "--cov --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.run]
+source = ["pipelines", "provenance", "ui", "eval"]
+omit = ["*/test_*.py", "ui/app/*", "archive/*"]
+
+[tool.coverage.report]
+skip_empty = true
