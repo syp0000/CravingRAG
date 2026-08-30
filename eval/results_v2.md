@@ -74,7 +74,7 @@ axis signals earn their place as the exclusion's evidence and the explanation la
    The rejected llama judge (κ=0.53) was not far below the human's own test-retest —
    the rejection stands on its systematic over-exclusion, not the agreement number.
 
-## Honest limits (v3 table in PLAN.md)
+## Honest limits (v3 table in docs/PLAN.md)
 
 Single annotator; 15 dev-set queries written with answers in mind; V1→V2 is not an
 ablation (V1→V1+excl and A→V1 are); no independent holdout. The numbers above compare

@@ -13,7 +13,7 @@ every claim and stores NULL for anything it cannot ground. The evidence field is
 anti-hallucination mechanism this project's origin demanded.
 
 V1 findings that motivated the rebuild: [DESIGN.md](DESIGN.md) §7.
-Judging rules (unchanged between V1 and V2): [eval/JUDGING.md](eval/JUDGING.md).
+Judging rules (unchanged between V1 and V2): [eval/JUDGING.md](../eval/JUDGING.md).
 
 Working agreement: Siyeon writes the code. Weekends only. Every task states **what must be
 true when it's done**, so a session can stop anywhere without losing the thread.
@@ -185,7 +185,7 @@ Exclusion must be in the baseline *and expected to score badly*. V1 has no exclu
 mechanism at all — "no peanuts" is the negation failure already measured in v1. That failing
 number is what makes V2's fix legible.
 
-**→ Deliverable: the baseline number. DONE 2026-07-31 — NDCG@5 0.797 overall, exclusion 0.504 (q13 almonds 0.307, q12 peanuts 0.352). Full readout: [eval/results_baseline.md](eval/results_baseline.md).**
+**→ Deliverable: the baseline number. DONE 2026-07-31 — NDCG@5 0.797 overall, exclusion 0.504 (q13 almonds 0.307, q12 peanuts 0.352). Full readout: [eval/results_baseline.md](../eval/results_baseline.md).**
 
 ## Weekend 2 — Structured signals
 
@@ -270,7 +270,7 @@ for the full set) and does not fit a trial.
 **EXECUTED 2026-08-26.** The measured system is live, and public without an unbounded bill.
 
 **Live app (invite-only), `cravingrag.com`.** Arbitrary free-text pipeline. One Docker image
-([Dockerfile](Dockerfile)) builds the React app and serves it with the live API from one
+([Dockerfile](../Dockerfile)) builds the React app and serves it with the live API from one
 process; Snowflake credentials come from `SNOWFLAKE_*` env vars (inline PEM key), so no
 secret file ships (local dev still reads `.dlt/secrets.toml`). Hosted on Render (free tier);
 proxied through Cloudflare with **Cloudflare Access**, so only allowlisted emails enter via a

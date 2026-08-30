@@ -4,7 +4,7 @@
 
 > "상큼하고 과즙이 터지는" → 어울리는 레시피 3개 + 각각 왜 맞는지
 
-*English version: [README.md](README.md) · [DESIGN.md](DESIGN.md)*
+*English version: [README.md](../README.md) · [DESIGN.md](../docs/DESIGN.md)*
 
 ---
 
@@ -74,7 +74,7 @@ dlt는 외부 소스에서 데이터를 가져와 Snowflake *안으로 밀어넣
 ### 2. 파이썬 환경
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements/pipeline.txt
 ```
 
 ### 3. Snowflake 연결 정보
@@ -126,7 +126,7 @@ cp .dlt/example.secrets.toml .dlt/secrets.toml
 
 ## 진행 상황
 
-> **V2 재구축 진행 중** — [PLAN.md](PLAN.md) 참고. 아래 체크리스트는 v1 계획이며 기록용으로 유지.
+> **V2 재구축 진행 중** — [PLAN.md](../docs/PLAN.md) 참고. 아래 체크리스트는 v1 계획이며 기록용으로 유지.
 > Phase 6–8은 v2에서 제외됨.
 
 - [x] Phase 1 — dlt 적재

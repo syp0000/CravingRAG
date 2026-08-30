@@ -1,0 +1,5 @@
+# Offline data and evaluation tools. The live server dependency is shared with deploy.txt.
+-r deploy.txt
+
+dlt[snowflake]>=1.0
+pandas>=2.0

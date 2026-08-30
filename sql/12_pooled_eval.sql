@@ -20,7 +20,7 @@
 --        A → V1   the enrichment effect (same retriever, different text)
 --        V1 → V2  the whole structured system vs the enriched vector — NOT an ablation:
 --                 representation, parsing, scoring, exclusion, component filter and
---                 fallback all change at once. Isolating them is v3 work (PLAN.md).
+--                 fallback all change at once. Isolating them is v3 work (docs/PLAN.md).
 --
 -- Judgments: EVAL2.JUDGMENTS holds every human grade with a `source` column
 -- (human_W1_2026-07 = the 150 V1-pool grades; human_2026-08 = the V2-session grades).

@@ -214,13 +214,13 @@ already lost to.
 
 ## 10. Deployment: one gated image, credentials from env, no shared secret
 
-The demo ships as a **single Docker image** ([Dockerfile](Dockerfile)): a Node stage builds
+The demo ships as a **single Docker image** ([Dockerfile](../Dockerfile)): a Node stage builds
 the React app, a Python stage serves that build and the live API from the same `server.py`
 process. `server.py` already served `ui/app/dist` next to the endpoints, so one process is
 the honest deploy unit, not a separate static host plus an API host.
 
 Credentials moved to `SNOWFLAKE_*` env vars with the key-pair private key as **inline PEM**
-([ui/server.py](ui/server.py) `_connect_kwargs`). The deployed host has no
+([ui/server.py](../ui/server.py) `_connect_kwargs`). The deployed host has no
 `.dlt/secrets.toml`; reading that file stays as the local-dev fallback only. Nothing secret
 enters the image or the repo.
 

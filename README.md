@@ -1,386 +1,324 @@
 # CravingRAG
 
-**Describe a craving in plain language. Get real dishes back — with the evidence for why.**
+**Describe what you want to eat in everyday language. Get real recipes back, with the
+ingredient evidence behind each match.**
 
-> *"warm spicy soup, no shellfish"* → a sky of 20,000 recipes narrows to five, and every
-> match shows the exact ingredient lines that earned it.
+[Try the public demo](https://demo.cravingrag.com)
 
-## What this is, in plain words
+> "Warm spicy soup, no shellfish" becomes a short list of real recipes. Each result
+> explains which flavors matched and which ingredient lines support that explanation.
 
-Type what you feel like eating, the way you would say it to a friend: *"something warm and
-brothy, but no cream."* CravingRAG searches a catalog of real recipes — nothing is
-generated, no dish is invented — and returns up to five that fit. Next to each dish it
-shows its receipts: the actual ingredient line that proves the match (*spicy 0.8 ← "10 Thai
-chile peppers, seeded and minced"*).
+## What does it do?
 
-Under the hood it works like this:
+CravingRAG searches 20,000 real recipes. It does not invent dishes or write new recipes.
 
-1. **Each recipe is read once by an AI** (Snowflake's built-in Cortex models), which writes
-   down eight sensory scores — how spicy, warm, rich, fresh, sweet, brothy, savory,
-   comforting the dish is, each from 0 to 1 — **plus the ingredient line that justifies
-   each score**. No evidence, no score. These land as ordinary columns in a database table.
-2. **Your craving is matched by meaning, not by matching words.** Both the recipes and
-   your query are turned into *embeddings* — lists of numbers that place similar meanings
-   near each other — so "cozy noodle bowl" can find a ramen recipe that never uses the
-   word "cozy".
-3. **Things you said to avoid are removed by a literal ingredient check, not by the AI.**
-   Meaning-based search is bad at "no almonds" (it hears "almonds" and finds almonds), so
-   exclusions are enforced by scanning the real ingredient text. If a recipe's ingredients
-   can't prove an allergen is absent, it is dropped — the filter fails closed.
+A person can describe a feeling, flavor, texture, or restriction, such as:
 
-The same one-time extraction serves two customers: the consumer search above, and a
-business view that reads the identical columns the other way round — *"which cravings does
-this catalog fail to serve?"* One extraction, one table, two products.
+- "Something light and fresh"
+- "A cozy Korean stew"
+- "Chocolate dessert, no almonds"
+- "Savory noodle soup"
 
-## Why it exists
+The app returns up to five recipes. It can also show evidence such as:
 
-It started as a leftover question from a previous project (PantryAI): an LLM can *generate*
-a recipe that ticks every requested box and still feel implausible as food. So instead of
-asking AI to invent dishes, can we *retrieve* real ones that match what someone feels like
-eating? Answering that honestly meant measuring where meaning-based search fails (it
-cannot subtract, it drowns identity in vibes) and building controlled fixes. The
-measurement below is that study. The Snowflake data-product angle appeared only afterward,
-when the columns written for search turned out to already be the analytics
-([sql/13](sql/13_catalog_insights.sql) to [sql/16](sql/16_demand_supply_mart.sql)) —
-nothing was re-extracted.
+```text
+spicy 0.8
+because the recipe contains: "10 Thai chile peppers, seeded and minced"
+```
 
-Project history and the decision log: [PLAN.md](PLAN.md) · [DECISIONS.md](DECISIONS.md).
+The public demo uses 20 saved searches, so anyone can try it without creating a paid AI
+request. The invite-only live version accepts any search phrase.
 
-## Does it actually work? (measured, not claimed)
+## Why did I build it?
 
-Four search strategies ("arms") were compared on the same 15 fixed queries over a
-342-recipe curated corpus, with 386 blinded human judgments (the judge saw query and dish,
-never which arm produced it). The two metrics both run 0 to 1, higher is better: **P@5**
-is simply "of the top five results, what share did the human judge call good"; **NDCG@5**
-is the same idea but also rewards putting the best dishes first. Full readout:
-[eval/results_v2.md](eval/results_v2.md).
+An earlier project generated recipes with an AI model. The recipes often satisfied every
+written requirement but still did not feel believable as food.
 
-| arm | NDCG@5 | P@5 |
+CravingRAG tests a different idea: search real recipes instead of generating new ones.
+The main question is whether a search system can understand how a person wants food to
+feel, while still respecting clear restrictions such as "no peanuts."
+
+## How does a search work?
+
+### 1. Read each recipe once
+
+Snowflake Cortex reads each recipe and records eight qualities:
+
+```text
+spicy, warm, rich, fresh, sweet, brothy, savory, comforting
+```
+
+Each score must include an ingredient or instruction line as evidence. If there is no
+evidence, the score is left empty.
+
+### 2. Compare meanings
+
+The system converts recipes and the search phrase into number lists called embeddings.
+Embeddings place similar meanings near each other. This lets "cozy noodle bowl" find a
+ramen recipe even when the recipe never uses the word "cozy."
+
+### 3. Enforce exclusions separately
+
+Meaning-based search is not reliable for negative phrases. A search for "no almonds" can
+accidentally find almond recipes because the word "almonds" is present.
+
+CravingRAG therefore checks the real title and ingredient text. A recipe is removed when
+it contains an excluded ingredient. This is a preference filter, not medical or allergy
+advice.
+
+### 4. Remove clearly poor results
+
+A small quality layer removes drinks when the person asked for food, recipe components
+when the person asked for a full dish, identity mismatches, and repeated versions of the
+same dish family.
+
+This layer is called Lean V3. It improves the displayed results, but it has not been given
+a new paper-style performance score. The published scores below still belong to the
+frozen V2 evaluation.
+
+## What did the evaluation find?
+
+Four search methods were tested on the same 15 search phrases and the same 342-recipe
+development collection. A human reviewer scored 386 query and recipe pairs without seeing
+which method produced them.
+
+| Search method | NDCG@5 | Precision@5 |
 |---|---:|---:|
-| raw recipe text → embedding (control) | 0.582 | 0.560 |
-| structured 8-axis scoring | 0.698 | 0.747 |
-| LLM sensory profile → embedding | 0.732 | 0.773 |
-| **profile embedding + hard exclusion** | **0.844** | **0.880** |
+| Raw recipe text embedding | 0.582 | 0.560 |
+| Structured eight-quality scoring | 0.698 | 0.747 |
+| AI-written sensory profile embedding | 0.732 | 0.773 |
+| **Sensory profile embedding plus hard exclusion** | **0.844** | **0.880** |
 
-Each gap between rows measures one thing:
+Both scores range from 0 to 1, and higher is better.
 
-- **Rewriting recipes into sensory language before embedding works** (+0.150 over the
-  control). Raw text ranks by word overlap — it returned five almond desserts for
-  *"without almonds"*. This was the project's original claim, finally measured against a
-  control.
-- **The hard exclusion filter is the biggest lever** (+0.112 overall; on exclusion
-  queries alone, NDCG jumps 0.245 → 0.855). Embeddings cannot subtract; a literal
-  ingredient check can. Statistical caveat, stated plainly: with only 15 queries the 95%
-  confidence interval on this particular gap crosses zero ([-0.009, +0.271] — meaning
-  chance can't be fully ruled out; reproduce with `.venv/bin/python eval/confidence.py`).
-  The enrichment gap above *is* statistically significant; this one needs more queries.
-- **The 8-axis scoring loses the ranking war but wins its real jobs.** It collapses when
-  a query's key noun has no axis (*"savory NOODLE soup"* scored 0.07 — the axes express
-  intensity, not identity), but it powers the exclusion evidence and the entire
-  explanation layer. *Precision from structure, coverage from embeddings* — with numbers.
+- **Precision@5** asks how many of the first five results were judged relevant.
+- **NDCG@5** also rewards the system for placing the best results first.
 
-The judging produced its own findings — including the machine auditing the human (7 human
-grades violated their query's exclusion and were overridden to 0, with a record of why),
-and a baklava listing `"finely chopped nuts"` judged 0 for *"without almonds"* because
-unverifiable absence fails closed. See [eval/results_v2.md](eval/results_v2.md) §Findings.
+The complete results are in [eval/results_v2.md](eval/results_v2.md).
 
-## Scale
+### What the numbers mean
 
-The measured pipeline then ran at scale, meter first: a 1,000-recipe trial batch read
-**$4.55** of actual spend from Snowflake's usage ledger, the projection cleared the budget
-gate, and **20,000 recipes were enriched in 21 minutes for ~$90** (profiles + embeddings +
-signals; the evidence-or-NULL contract held with 0 violations). Scale immediately taught
-two things: noodle-soup queries fixed themselves (meaning-based coverage grows with
-catalog size), and a new failure appeared (beverages flooding "refreshing" — the curated
-342 had no drinks; a random 19.7k does). Procedure and costs: [PLAN.md](PLAN.md)
-§Weekend 5+ (the one-off scale-up script itself was not preserved; the plan records the
-steps and measured numbers).
+1. Rewriting recipes into sensory language improved NDCG@5 by 0.150 over raw recipe text.
+2. The hard ingredient exclusion was the largest improvement. It raised exclusion-query
+   NDCG from 0.245 to 0.855.
+3. The structured quality scores were useful for evidence and filtering, but they were not
+   the best ranking method. They understand intensity, such as "very spicy," better than
+   dish identity, such as "noodle soup."
+4. The exclusion improvement has a wide confidence interval because there were only 15
+   test phrases. More independent queries are needed before making a broad research claim.
 
-**Scope of the numbers:** every metric above was judged on the 342-recipe dev corpus. The
-20k live corpus has not been re-judged, and the beverage failure is direct evidence the
-scores don't transfer unchanged — treat 0.844 as a dev-corpus result, not a live one.
+The project intentionally keeps the weak results and uncertainty visible. See the
+[baseline report](eval/results_baseline.md), [V2 report](eval/results_v2.md), and
+[judging rules](eval/JUDGING.md).
 
-## The app — a constellation you can ask
+## From 342 recipes to 20,000
 
-```bash
-.venv/bin/python ui/server.py    # → http://localhost:8642
-```
+The small collection was used for controlled evaluation. The same enrichment pipeline
+was later run on 20,000 recipes.
 
-Every dish is a star. Type a craving: the live pipeline parses it (a real Cortex call),
-maps concepts to axes through a hand-editable "sensory wiki", then the exclusion pass
-kills matching stars in red — each flashing the ingredient that caught it — and the
-survivors (up to five) form a constellation, with the verbatim evidence in a side card.
-Ranking uses the measured winner (profile embeddings + exclusion); the axes explain. The
-UI renders scored rows and invents nothing.
+- A 1,000-recipe trial cost $4.55.
+- The full 20,000-recipe run took 21 minutes and cost about $90.
+- Every non-empty score still had evidence.
 
-A runtime quality layer ([ui/search_quality.py](ui/search_quality.py)) then enforces what
-the query said explicitly: dish identity (*noodle soup* means noodle **and** soup), food
-vs drink (a beverage only appears if the query asked for a drink), component filtering
-(ganache is an ingredient, not dinner — unless you asked for ganache), and dish-family
-dedupe (one hot-and-sour soup, not three). Fewer than five defensible answers → fewer
-than five results, never padding.
+The larger collection fixed some coverage problems but exposed new ones. Drinks appeared
+in food searches, and near-duplicate recipes filled the result list. Those failures led to
+the Lean V3 quality layer.
 
-The UI is the React app in `ui/app` (served built by `server.py`; `npm run dev` in
-`ui/app` for the Vite dev server), three pages: **Search**, **Catalog** and **About**.
-Motion is GSAP, kept quiet. The two single-file prototypes that came before it are in
-`archive/` (see *Development* below).
+The evaluation score of 0.844 belongs only to the 342-recipe development collection. It
+must not be presented as a score for the 20,000-recipe live collection.
 
-## Deployment (two tiers)
+## What can you see in the app?
 
-Every live search is a real Cortex call against a paid warehouse, so a wide-open public
-URL would be an open credit meter. The split solves that without hiding the work:
+The React app has three pages:
 
-**Public gallery — [demo.cravingrag.com](https://demo.cravingrag.com).** Anyone, no
-login, zero cost per view. The same React app builds in gallery mode
-(`VITE_PUBLIC_GALLERY=1`, [ui/app/src/api.js](ui/app/src/api.js)) and replays 20 curated
-cravings from a bundled `gallery.json` that [ui/build_gallery.py](ui/build_gallery.py)
-precomputes once through the real pipeline. Static files only, hosted on Cloudflare
-Pages — it never touches Snowflake.
+- **Search:** Find recipes and inspect why each one matched.
+- **Catalog:** Compare simulated demand with the real recipe supply.
+- **About:** See the pipeline, evaluation, and limitations in plain language.
 
-**Live app — cravingrag.com (invite-only).** The arbitrary free-text pipeline. One Docker
-image ([Dockerfile](Dockerfile)) builds the React app and serves it with the live API from
-one stdlib process; runtime deps are just `snowflake-connector-python`, and credentials
-come from `SNOWFLAKE_*` env vars with the key as inline PEM, so no secret file ships
-(`server.py` falls back to `.dlt/secrets.toml` only for local dev). The server connects as
-**`CRAVING_APP`**, a least-privilege role ([sql/17_app_role.sql](sql/17_app_role.sql)):
-read the catalog, call the two AI functions, insert one analytics row per search —
-nothing else (`SNOWFLAKE_ROLE` overrides). Hosted on Render (free tier) behind a
-Cloudflare-proxied domain with **Cloudflare Access**: only allowlisted emails get in, via
-a one-time code (no account needed). The gate is cost control as much as privacy.
-Free-tier caveat, stated honestly: the instance sleeps when idle, so the first hit after
-a lull takes ~30–60s to wake (the Access email step hides most of that).
+Every search also creates a decision record. The record stores how the query was
+interpreted, which candidates were rejected, why they were rejected, and which recipes
+were selected. Recording is optional and never blocks a search.
 
-The limits of that boundary (no rate limiting, request-size bounds, fixed error
-bodies) are spelled out under *Development › Security boundary* below.
+## Public gallery and live search
 
-## Business side — the same scores as a dashboard
+### Public gallery
 
-The extraction that powers search doubles as a **semantic layer**
-([sql/14_semantic_view.sql](sql/14_semantic_view.sql)) — a described, queryable model of
-the axis columns that Snowflake's **Cortex Analyst** can drive, so a product question in
-plain English becomes SQL nobody writes:
+[demo.cravingrag.com](https://demo.cravingrag.com) is open to everyone. It reads 20 saved
+results from `gallery.json` and never contacts Snowflake during a visit.
 
-> *"How many dishes satisfy fresh + spicy?"* → **240 of 19,260 (1.25%)** — while
-> warm/savory comfort food is half the catalog. The underserved-combination finding is
-> one natural-language question away.
+The saved queries were parsed with the V2 parser. Their final recipe lists were regenerated
+after the Lean V3 quality layer was added.
 
-More catalog findings (all real data):
-[sql/13_catalog_insights.sql](sql/13_catalog_insights.sql) — the catalog skews hard to
-comfort food (warm 70%, spicy 6%), and a dairy-free customer loses **63%** of it.
+### Invite-only live app
 
-**Demand → supply → decision.** Supply alone cannot say whether 240 is too few. This
-project has no real search traffic, so demand is *declared, not observed* — and labeled
-as such: three scenarios with every assumption in one file
-([data/demand_scenarios.yml](data/demand_scenarios.yml)), a seeded generator
-([pipelines/generate_demo_demand.py](pipelines/generate_demo_demand.py), 3,000 events, 49
-phrasings, each parsed once by the real parser) writing to `ANALYTICS.SEARCH_EVENTS`
-([sql/15](sql/15_demand_events.sql)) with `source = 'synthetic_demo'` on every row, and a
-gap table ([sql/16](sql/16_demand_supply_mart.sql)):
+The live version accepts any search phrase and makes paid Snowflake Cortex calls. It sits
+behind Cloudflare Access so only approved email addresses can use it. The server uses a
+least-privilege Snowflake role defined in [sql/17_app_role.sql](sql/17_app_role.sql).
 
-```sql
-SELECT * FROM ANALYTICS.DEMAND_SUPPLY_GAPS ORDER BY opportunity_index DESC;
--- phoenix_summer / fresh_spicy: 42.7% of demand vs 1.25% of catalog → 34× under-supplied
-```
+## Catalog planning example
 
-`opportunity_index = demand_share / supply_share` — "how much people ask for it, divided
-by how much of the menu answers it." The **Catalog** page in the UI renders that table.
-Real searches from the live app are recorded as `source = 'live_demo'` and kept out of the
-synthetic ratios. The generator also records what it *meant* separately from what the
-parser *understood*; their disagreement is a free parser-quality measurement (the parser
-reads "hot dish" as temperature).
+The same recipe scores can answer a business question: what do people ask for that the
+catalog does not provide?
 
-## Decision provenance (why did I get these five?)
+The current demand data is synthetic. No real customer behavior is claimed. Three clearly
+labeled scenarios generate 3,000 sample searches. The Catalog page compares those searches
+with the real recipe supply.
 
-Every search writes one decision record: the query, how it was parsed, which candidates
-were looked at, which were rejected and for exactly which reason (`excluded:cream`,
-`component`, `format_mismatch:drink`, `identity_mismatch:noodle`,
-`duplicate_dish:<id>`), the picks with their evidence — and a link to the architecture
-decision that put the exclusion filter there in the first place. Architecture decisions
-are records too (`provenance/architecture.py`: eval result → finding → decision), so one
-trace runs from a served dish all the way back to the measurement that justified it.
+For example, the Phoenix summer scenario asks for fresh and spicy food much more often than
+the catalog provides it. This demonstrates how the search data could support a menu or
+content decision once real usage data exists.
 
-The app talks to a small `DecisionRecorder` interface (`provenance/recorder.py`), never
-to a vendor. `CRAVING_DECISIONS` picks the backend: `jsonl` (default, stdlib,
-`data/decisions.jsonl`), `off`, or `semantica`. Recording failures are logged, never
-surfaced: a broken notebook cannot break a search.
+## Important limitations
 
-```bash
-.venv/bin/python -m provenance.architecture          # record the V1→V2 chain once
-.venv/bin/python -m provenance.recorder list          # everything recorded
-.venv/bin/python -m provenance.recorder trace <id>    # walk causes back to the root
-pytest provenance -v
-```
+- The evaluation used 15 development queries, not an independent public benchmark.
+- One person performed the main relevance judgments.
+- The 342-recipe score does not measure the 20,000-recipe live collection.
+- AI-extracted qualities and evidence can be wrong.
+- Ingredient exclusion is a preference filter, not allergy or medical guidance.
+- Lean V3 uses narrow runtime rules and does not have a separate NDCG score.
+- Synthetic demand demonstrates the workflow but does not represent real customers.
+- The demand table counts recipe variants separately, so supply can be overstated.
 
-**Why Semantica is an adapter, not the default.** It was evaluated for exactly this layer
-(decision records + causal links). Its API fits, but installing it pulls torch,
-transformers, spaCy, OpenCV and more (1.8 GB measured), imports in ~40 s, and in 0.6.6
-its own chain-tracing does not survive a save/load cycle. The two things this project
-needs — append a record, walk the `causes` links — are standard-library work. So
-Semantica stays behind the flag for experiments, and retrieval stays entirely in
-Snowflake.
-
-## Honest limits (deliberately deferred, tracked in [PLAN.md](PLAN.md) §v3)
-
-Single annotator (test-retest agreement κw 0.624 on 29 re-judged pairs — decent, not
-gold-standard); 15 dev-set queries written with answers in mind — an acceptance suite,
-not a neutral benchmark; the V1→V2 comparison is not a full ablation (the raw-text
-control and exclusion on/off are); eval numbers are 342-corpus measurements, not yet
-re-judged at 20k. An LLM judge (a different model family than the enricher) was designed,
-validated against the human grades, and **rejected** — not for its agreement score but
-for the direction of its errors (systematic over-exclusion). At 20k the corpus floods
-with near-duplicates: *"warm spicy soup"* used to return three hot-and-sour soups in the
-top five. The quality layer now clusters dish families at serve time, but the demand mart
-still counts every variant, so its supply numbers overcount distinct dishes by an
-unmeasured factor.
+Possible full V3 research is documented as future work in
+[docs/PLAN.md](docs/PLAN.md). It would require a new recipe and query representation, an
+independent holdout query set, another reviewer, full ablations, and a new evaluation over
+the same frozen 20,000-recipe collection.
 
 ## Architecture
 
 [![CravingRAG system data flow](docs/diagrams/craving-pipeline.png)](docs/diagrams/craving-pipeline.html)
 
-*Interactive version: open [`docs/diagrams/craving-pipeline.html`](docs/diagrams/craving-pipeline.html) locally (archify; source in `craving-pipeline.dataflow.json`).*
+Open the [interactive architecture diagram](docs/diagrams/craving-pipeline.html) for more
+detail.
 
-## Stack
+## Documentation
 
-Python (`dlt`, `pandas`, stdlib HTTP server) · Snowflake (`AI_COMPLETE`, `AI_EMBED`,
-`VECTOR`, VARIANT, semantic views, Cortex Analyst) · evaluation: frozen queries, pooled
-blinded judgments, NDCG@5 / P@5, bootstrap CIs · deploy: Docker, Render, Cloudflare
-Access. No external LLM API, no separate vector DB.
+The root folder keeps only the files needed to understand, install, and run the project.
+Detailed project records live in [`docs/`](docs/README.md).
 
-## Data, credits, and licenses
-
-**Data.** The corpus derives from **RecipeNLG** (Poznań University of Technology),
-licensed for non-commercial research/educational use. The source CSV and all generated
-extracts stay local (`data/*` gitignored except the hand-authored
-`data/curation_list.csv` and `data/demand_scenarios.yml`). Search demand in
-`ANALYTICS.SEARCH_EVENTS` is synthetic, generated from that yml, and labeled
-`source = 'synthetic_demo'` on every row.
-
-**Third-party code and tools this project uses.** All code written here is by Siyeon
-Park; the pieces below are other people's work, used under their licenses.
-
-| what | used for | author | license |
-|---|---|---|---|
-| [GSAP](https://gsap.com) 3.15 + `@gsap/react` | page transitions, constellation and results motion (`ui/app`) | GreenSock / Webflow | [GSAP Standard License](https://gsap.com/standard-license) (no charge) |
-| [gsap-skills](https://github.com/greensock/gsap-skills) | agent guidance while writing the GSAP code above | GreenSock | MIT |
-| [archify](https://github.com/tt-a1i/archify) 2.16 | the pipeline diagram (`docs/diagrams/craving-pipeline.html`, rendered from `.dataflow.json`) | tt-a1i, based on Cocoon AI's architecture-diagram-generator | MIT |
-| [Semantica](https://github.com/semantica-agi/semantica) | optional decision-graph backend behind `CRAVING_DECISIONS=semantica` (see Decision provenance) | semantica-agi | MIT |
-| React, Vite | UI build | Meta, Evan You and contributors | MIT |
-| `dlt`, `snowflake-connector-python`, `pandas`, PyYAML | loading, Snowflake access, data handling | respective authors | Apache-2.0 / BSD / MIT |
-| Snowflake Cortex (`AI_COMPLETE`, `AI_EMBED`, Cortex Analyst) | enrichment, embeddings, semantic layer | Snowflake | Snowflake terms of service |
-| [Google Flow](https://labs.google/flow) (Veo) | the three background videos + posters under `ui/app/public/media`, generated for this project | Google | generated output, used under [Google's Gemini/Flow terms](https://policies.google.com/terms/generative-ai) |
-
-Background footage under `ui/app/public/media` (three mp4 + posters) is AI-generated with
-Google Flow (Veo) for this project; used under Google's generative-AI terms.
-
-**This repository's own license.** The source code is [MIT](LICENSE). The license covers
-the authored code only — the RecipeNLG-derived data stays non-commercial
-research/educational regardless, and the generated media and third-party dependencies
-above keep their own terms.
+| Document | Purpose |
+|---|---|
+| [docs/DESIGN.md](docs/DESIGN.md) | Original design and the V1 failures that motivated V2 |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture choices and rejected alternatives |
+| [docs/PLAN.md](docs/PLAN.md) | Build history, scale-up procedure, known limits, and future work |
+| [eval/](eval/) | Frozen queries, judgments, evaluation scripts, and result reports |
 
 ## Development
 
-**Versions.** Python 3.12 (`pyproject.toml`, CI), Node 22 (CI; 20+ works), npm.
+### Requirements
 
-**Two install profiles.** The offline test suite needs only stdlib + pytest. The
-pipelines and the live server need the Snowflake stack and credentials.
+- Python 3.12
+- Node.js 20 or newer. CI uses Node.js 22.
+- Snowflake credentials only for live searches, data pipelines, and evaluation queries
+
+Python dependencies are grouped by purpose in [`requirements/`](requirements/).
+
+| File | Install it when you need to |
+|---|---|
+| `requirements/dev.txt` | Run tests and the local server |
+| `requirements/deploy.txt` | Build only the live server container |
+| `requirements/pipeline.txt` | Rebuild data, enrichment, or evaluation tables |
+
+### Local setup
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt                      # tests only: pytest, pytest-cov
-pip install -r requirements.txt                          # + dlt, snowpark, connector: pipelines and server
-cp .dlt/example.secrets.toml .dlt/secrets.toml           # key-pair auth; see comments inside
-(cd ui/app && npm ci)                                    # React app: vite, vitest, oxlint
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements/dev.txt
+cp .dlt/example.secrets.toml .dlt/secrets.toml
+chmod 600 .dlt/secrets.toml
+cd ui/app && npm ci && npm run build && cd ../..
+.venv/bin/python ui/server.py
 ```
 
-**Checks.**
+Open `http://localhost:8642`.
+
+Snowflake credentials are not needed for the automated test suite. They are needed when
+running the live server because live searches call Snowflake Cortex.
+
+Install the additional pipeline dependencies only when rebuilding the data:
 
 ```bash
-pytest                           # all Python tests + coverage.xml (config in pyproject.toml)
-cd ui/app && npm run lint        # oxlint
-cd ui/app && npm test            # vitest + Testing Library, writes coverage/lcov.info
-cd ui/app && npm run build       # production bundle into ui/app/dist
-scripts/verify.sh                # the four above in one command, no credentials needed
+pip install -r requirements/pipeline.txt
+```
+
+### Checks
+
+```bash
+scripts/verify.sh
 python pipelines/compile_wiki.py --check
-python eval/confidence.py        # reproduce the eval table + bootstrap CIs (Snowflake)
-sonar-scanner                    # optional; reads sonar-project.properties and both coverage
-                                 # reports (SONAR_HOST_URL / SONAR_TOKEN from the environment)
 ```
 
-**What runs offline.** Everything under `pytest` and `npm test`: `ui/test_server.py`
-drives the HTTP server and the whole search pipeline against a scripted fake connection,
-`ui/test_search_quality.py`, `provenance/`, and `pipelines/test_compile_wiki.py` are
-pure Python, `ui/app/src/App.test.jsx` mocks the network and the footage. No test opens
-a Snowflake session or makes a Cortex call.
+`scripts/verify.sh` runs Python tests, frontend lint, frontend tests, and the production
+frontend build. Tests use a fake Snowflake connection and make no paid calls.
 
-**What needs Snowflake credentials.** Every pipeline script, every file in `sql/`,
-`eval/confidence.py`, `ui/build_gallery.py`, and running `ui/server.py` itself.
-Locally the server reads `.dlt/secrets.toml`; deployed, it reads `SNOWFLAKE_*` env vars
-with the private key as inline PEM (`SNOWFLAKE_PRIVATE_KEY`). Nothing else is required.
+Optional Sonar analysis reads [sonar-project.properties](sonar-project.properties) and the
+Python and frontend coverage reports:
 
-**CI.** [.github/workflows/ci.yml](.github/workflows/ci.yml) runs the Python and
-frontend jobs on every push and pull request. Sonar analysis is a third job, pinned to a
-commit SHA of `sonarqube-scan-action`, that runs only when the repository secret
-`SONAR_TOKEN` exists; without it the job logs a skip and the build still passes.
-Repository settings it reads: secret `SONAR_TOKEN` (required), secret `SONAR_HOST_URL`
-(optional, SonarCloud by default), variable `SONAR_ORGANIZATION` (required on
-SonarCloud), variable `SONAR_PROJECT_KEY` (optional, defaults to `<owner>_<repo>` so a
-fork gets its own key). Locally: `sonar-scanner -Dsonar.organization=<org>
--Dsonar.projectKey=<owner>_<repo>` with the token in `SONAR_TOKEN`.
+```bash
+sonar-scanner
+```
 
-The quality gate is configured in Sonar, not in the repo. On SonarCloud: *Administration
-→ Quality Gates → Create* (copy *Sonar way*), conditions on new code: coverage ≥ 80%,
-duplicated lines < 3%, reliability / security / maintainability rating A, security
-hotspots reviewed 100%; no condition on overall coverage, which is raised gradually. Then
-*Project → Administration → Quality Gate* → select it, new-code definition *previous
-version*. Two findings are reviewed and kept, not suppressed: the seeded
-`random.Random` in `pipelines/generate_demo_demand.py` and `eval/confidence.py` is
-statistical sampling with a fixed seed for reproducibility (mark the hotspot *Safe*), and
-the `http://localhost:8642` proxy targets in `ui/app/vite.config.js` are the local dev
-server only, TLS terminates at Cloudflare (*Safe*). Both are recorded in
-[sonar-project.properties](sonar-project.properties).
+GitHub Actions runs the Python and frontend jobs on every push and pull request. The Sonar
+job runs only when `SONAR_TOKEN` is configured. SonarCloud also requires the
+`SONAR_ORGANIZATION` repository variable.
 
-**Security boundary.** The live deployment sits behind Cloudflare Access; that is the
-authentication layer and the only one. Access does **not** rate-limit: every request
-from an allowlisted user reaches Snowflake and costs a Cortex call. The server bounds
-request *size* (`MAX_QUERY_LEN`, default 300 chars; at most 10 cuisine / avoid values of
-40 safe characters; spice and richness restricted to the chip values; a 60 s statement
-timeout via `SNOWFLAKE_QUERY_TIMEOUT`; a 30 s socket timeout) and returns a fixed
-`{"error": "internal error"}` on failure with the traceback in the server log only.
-There is no per-user throttle; for a small trusted allowlist that is a deliberate
-omission, and the upgrade path is a Cloudflare rate rule in front or a token bucket
-before the search call.
+### Security boundary
 
-**Archived prototypes.** `archive/` keeps superseded work out of the build and out of
-analysis: the Streamlit V1 app (`streamlit_app_v1.py`), the V1 search SQL, and two
-single-file HTML prototypes (`live.html`, `constellation_static.html`) that drew the
-constellation with hand-written SVG before the React app existed. They are not served,
-not built, not tested and not maintained; the React app in `ui/app` is the only UI.
+The live deployment relies on Cloudflare Access for authentication. The Python server also
+limits query size, accepted filter values, statement time, and socket time. It returns a
+fixed public error message while keeping detailed errors in server logs.
 
-**Pipeline order** (Snowflake): `pipelines/curate.py` → `pipelines/load_curated.py` →
-`sql/06`–`08` (enrichment) → `pipelines/compile_wiki.py` → `sql/09` (parser) →
-`pipelines/load_frozen_parses.py` (⚠️ before 10–12: they read `EVAL2.V2_PARSED`) →
-`sql/10`–`12` (exclusion, scoring, pooled eval) → `sql/13`–`14` (insights, semantic
-view) → `sql/15` → `pipelines/generate_demo_demand.py` → `sql/16` (demand events,
-synthetic demand, demand-supply mart; rerun `sql/14` ④ after) → `sql/17` (app role, for
-deploys) → `ui/server.py`. Scaling past the curated 342 is meter-first: read
-[PLAN.md](PLAN.md) §Weekend 5+ before spending.
+There is no per-user rate limit inside the Python server. If the live audience grows beyond
+a small trusted group, add a Cloudflare rate rule or a server-side token bucket before
+opening access.
 
-## Repo layout
+## Repository map
 
 ```text
-sql/      01 setup · 06-07 V1 baseline + eval · 08 signals · 09 parser (frozen)
-          10 exclusion view · 11 V2 scoring · 12 pooled 4-arm eval
-          13 catalog insights · 14 semantic view · 15-16 demand + mart
-          17 least-privilege app role
-pipelines/ curate · load_curated · compile_wiki · load_frozen_parses · generate_demo_demand
-wiki/     craving concepts, axis weights in frontmatter (Obsidian vault)
-eval/     queries.yml · JUDGING.md · judgments.csv (386, with provenance)
-          parses_frozen.csv · results_baseline.md · results_v2.md
-          confidence.py (bootstrap CIs)
-ui/       server.py (HTTP + validation) · pipeline.py (parse → retrieve → rank → record) ·
-          db.py (connection, retry) · search_quality.py · build_gallery.py · tests ·
-          app/src: App.jsx (routing shell) · Search.jsx (journey state) · SearchForm ·
-          Filters · ProgressLog · ResultsOverview · RecipeDetail · Backdrop (footage) · Sky
-provenance/ recorder (interface, jsonl, semantica) · recommendation · architecture · tests
-archive/  superseded: Korean docs, V1 search SQL, Streamlit V1, two HTML prototypes
+docs/          design, decisions, project history, and architecture diagrams
+requirements/  separate dependency profiles for development, deployment, and pipelines
+eval/          frozen queries, human judgments, metrics, and result reports
+pipelines/     curation, loading, wiki compilation, and synthetic demand tools
+sql/           Snowflake setup, enrichment, retrieval, evaluation, and analytics
+wiki/          human-editable craving concepts and their quality mappings
+ui/            Python server, search pipeline, quality checks, React app, and tests
+provenance/    decision records and trace tools
+archive/       retired V1 code, prototypes, and historical Korean documents
 ```
+
+The complete Snowflake build order and cost controls are recorded in
+[docs/PLAN.md](docs/PLAN.md).
+
+## Technology
+
+- Python, React, Vite, and GSAP
+- Snowflake Cortex, vector similarity, semantic views, and Cortex Analyst
+- Docker, Render, Cloudflare Pages, and Cloudflare Access
+- Pytest, Vitest, Testing Library, GitHub Actions, and SonarQube
+
+There is no external LLM API and no separate vector database.
+
+## Data and licenses
+
+The recipe collection comes from RecipeNLG by Poznan University of Technology. It is used
+for non-commercial research and education. Recipe-derived data stays local and is not
+included in Git.
+
+Search demand is synthetic and every generated row is labeled `synthetic_demo`.
+
+Project source code is licensed under [MIT](LICENSE). RecipeNLG data, generated media, and
+third-party dependencies keep their own terms.
+
+| Third-party item | Use |
+|---|---|
+| [GSAP](https://gsap.com) and `@gsap/react` | Interface animation |
+| [archify](https://github.com/tt-a1i/archify) | Architecture diagram |
+| [Semantica](https://github.com/semantica-agi/semantica) | Optional decision-record backend |
+| React and Vite | Web interface |
+| `dlt`, Snowflake connector, and pandas | Data loading and processing |
+| Snowflake Cortex | Enrichment, embeddings, and analytics |
+| Google Flow with Veo | Background videos created for this project |
+
+See [docs/DECISIONS.md](docs/DECISIONS.md) for the detailed technical reasoning and
+[docs/PLAN.md](docs/PLAN.md) for the full project history.

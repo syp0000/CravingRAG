@@ -27,7 +27,7 @@ CHAIN = [
      "summary": "Exclusion is a hard, fail-closed anti-join applied before ranking, never a score",
      "reasoning": "A dish that violates an exclusion is out regardless of similarity. "
                   "Unverifiable absence (empty NER, ambiguous 'nuts') counts as present.",
-     "outcome": "V2.EXCLUDED_PAIRS view (sql/10), aliases table, DECISIONS.md section 6",
+     "outcome": "V2.EXCLUDED_PAIRS view (sql/10), aliases table, docs/DECISIONS.md section 6",
      "alternatives_rejected": ["penalize excluded ingredients in the score (still leaks)",
                                "closed exclusion vocabulary (fails open on unknown terms)"]},
     {"id": "arch:v2-hybrid", "kind": "system_version",
@@ -35,19 +35,19 @@ CHAIN = [
      "summary": "CravingRAG V2: profile-vector ranking + hard exclusion + component filter; axes explain",
      "outcome": "NDCG@5 0.844 / exclusion 0.855 on the 342-recipe dev corpus (vs 0.732 / 0.245)",
      "source": "README.md 'The result', ui/server.py search()"},
-    # Lean V3 (numbers and cases from DECISIONS.md section 11; 20k live corpus, not the
+    # Lean V3 (numbers and cases from docs/DECISIONS.md section 11; 20k live corpus, not the
     # judged 342 — V2's NDCG stays untouched and unclaimed by this chain).
     {"id": "arch:eval-20k-quality", "kind": "eval_result",
      "causes": ["arch:v2-hybrid"],
      "summary": "V2 at 20k: 'warm spicy soup' returned three hot-and-sour soups in the top five",
      "outcome": "near-duplicate flooding; limeade for 'cold refreshing dessert'; ganache for 'chocolate dessert'",
-     "source": "PLAN.md 'Weekend 5+', DECISIONS.md section 11"},
+     "source": "docs/PLAN.md 'Weekend 5+', docs/DECISIONS.md section 11"},
     {"id": "arch:finding-similarity-no-identity", "kind": "finding",
      "causes": ["arch:eval-20k-quality"],
      "summary": "Vector similarity ranks semantic closeness but does not enforce dish identity, physical format, or diversity",
      "reasoning": "A drink can sit near a dessert query, a component near its dish, and five "
                   "variants of one dish are all equally close; closeness alone cannot say no.",
-     "source": "DECISIONS.md section 11"},
+     "source": "docs/DECISIONS.md section 11"},
     {"id": "arch:runtime-quality-layer", "kind": "architecture_decision",
      "causes": ["arch:finding-similarity-no-identity"],
      "summary": "Quality is enforced at serve time by pure-Python rules over the top-200, fail open: only explicit query terms create requirements",
@@ -62,7 +62,7 @@ CHAIN = [
      "causes": ["arch:runtime-quality-layer"],
      "summary": "CravingRAG Lean V3: V2 retrieval + runtime quality layer; identity, format, components, dedupe",
      "outcome": "post-ship audit on the 20-query live-corpus gallery: 0 drink leaks, 0 duplicate families",
-     "source": "DECISIONS.md section 11, ui/search_quality.py (+ ui/test_search_quality.py)"},
+     "source": "docs/DECISIONS.md section 11, ui/search_quality.py (+ ui/test_search_quality.py)"},
 ]
 
 

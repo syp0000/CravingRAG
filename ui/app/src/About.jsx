@@ -5,7 +5,7 @@ import { useGSAP } from '@gsap/react'
 
 gsap.registerPlugin(ScrollTrigger, useGSAP)
 
-// Facts only from README.md / PLAN.md / eval/results_v2.md. Numbers are the
+// Facts only from README.md / docs/PLAN.md / eval/results_v2.md. Numbers are the
 // 342-recipe dev-corpus results; the 20k live corpus is not judged.
 // Voice: Siyeon, first person, short. No em dashes.
 const PHASES = [
@@ -176,7 +176,7 @@ export default function About() {
           <li><b style={{ color: 'var(--ink)' }}>Duplicate grouping is a heuristic.</b> Near-identical dishes (three hot-and-sour soups) now count as one result, and drinks stay out of food searches — but both rules read titles and can occasionally merge or keep the wrong recipe.</li>
           <li><b style={{ color: 'var(--ink)' }}>This is not allergy advice.</b> The exclusion filter looks for words in the ingredient list. It is designed for preferences, not medical safety.</li>
         </ul>
-        <p style={{ marginTop: 10, color: 'var(--dim)' }}>The full list of known limitations is in PLAN.md, section v3.</p>
+        <p style={{ marginTop: 10, color: 'var(--dim)' }}>The full list of known limitations is in docs/PLAN.md, section v3.</p>
       </Section>
 
       <Section title="The paper trail">

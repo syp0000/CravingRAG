@@ -1,4 +1,0 @@
-dlt[snowflake]>=1.0
-pandas>=2.0
-streamlit>=1.38
-snowflake-snowpark-python>=1.20

@@ -315,7 +315,7 @@ be grounded in, which no amount of prompt tuning can substitute for.
 ### Phase 9 — Deployment, two tiers   ✅ 2026-08-26
 
 The measured system is live, and public without an unbounded bill. One Docker image
-([Dockerfile](Dockerfile)) builds the React app and serves it with the live API from a
+([Dockerfile](../Dockerfile)) builds the React app and serves it with the live API from a
 single process; Snowflake credentials come from env vars (inline PEM key), so no secret file
 ships. The **live app** (`cravingrag.com`) is hosted on Render behind **Cloudflare Access**:
 only allowlisted emails get in via a one-time email code, which is credit control as much as

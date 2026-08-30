@@ -2,7 +2,7 @@
 
 > "상큼하고 과즙이 터지는 게 먹고 싶어" → 실제 레시피 추천 + 추천 이유
 
-*English version: [DESIGN.md](DESIGN.md)*
+*English version: [DESIGN.md](../docs/DESIGN.md)*
 
 ---
 
